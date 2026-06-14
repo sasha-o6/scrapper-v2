@@ -11,6 +11,9 @@ interface IChannelEditorProps {
   onRemove(value: string): void
 }
 
+const formatChannelLabel = (channel: IChannelConfig): string =>
+  channel.title ? `${channel.title} (${channel.value})` : channel.value
+
 export const ChannelEditor = memo(({ items, onAdd, onRemove }: IChannelEditorProps) => {
   const [title, setTitle] = useState('')
   const [value, setValue] = useState('')
@@ -66,7 +69,7 @@ export const ChannelEditor = memo(({ items, onAdd, onRemove }: IChannelEditorPro
       <div className={styles.list}>
         {items.map((item) => (
           <div className={styles.listItem} key={item.value}>
-            <span>{item.title || item.value}</span>
+            <span>{formatChannelLabel(item)}</span>
             <button
               className={styles.ghostIconButton}
               type="button"

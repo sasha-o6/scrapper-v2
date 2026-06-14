@@ -1,3 +1,4 @@
+import { md } from '@mtcute/markdown-parser'
 import type { MessageQueue, PrismaClient } from '@prisma/client'
 
 import type { IMtcuteRuntimeClient } from '@backend/services/ClientManager'
@@ -78,7 +79,7 @@ export class MessageQueueWorker {
     }
 
     try {
-      await client.sendText(item.targetChat, item.messageText)
+      await client.sendText(item.targetChat, md(item.messageText))
       await this.db.messageQueue.update({
         where: { id: item.id },
         data: {

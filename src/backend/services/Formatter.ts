@@ -1,3 +1,5 @@
+import { md } from '@mtcute/markdown-parser'
+
 export interface IForwardMessageInput {
   channelTitle: string | null
   channel: string
@@ -7,33 +9,48 @@ export interface IForwardMessageInput {
   postLink: string
 }
 
-const MARKDOWN_V2_SPECIAL_CHARS = /[_*[\]()~`>#+\-=|{}.!]/g
+export const escapeMarkdown = (value: string): string => md.escape(value)
 
-export const escapeMarkdownV2 = (value: string): string =>
-  value.replace(MARKDOWN_V2_SPECIAL_CHARS, (match) => `\\${match}`)
+export const formatClickablePostLink = (value: string): string => {
+  const postLink = value.trim()
+
+  if (!postLink) {
+    return 'Посилання недоступне'
+  }
+
+  if (/^https?:\/\//i.test(postLink)) {
+    return postLink
+  }
+
+  if (/^(t\.me|telegram\.me)\//i.test(postLink)) {
+    return `https://${postLink}`
+  }
+
+  return postLink
+}
 
 export const formatForwardedMessage = (message: IForwardMessageInput): string => {
-  const channel = escapeMarkdownV2(message.channelTitle ?? message.channel)
-  const date = escapeMarkdownV2(
+  const channel = escapeMarkdown(message.channelTitle ?? message.channel)
+  const date = escapeMarkdown(
     new Date(message.dateUnixSeconds * 1000).toLocaleString('uk-UA')
   )
-  const escapedMessageText = escapeMarkdownV2(message.messageText)
-  const keyWords = escapeMarkdownV2(message.keyWords[0].join(', '))
-  const additionalWords = escapeMarkdownV2(message.keyWords[1]?.join(', ') ?? '')
-  const postLink = escapeMarkdownV2(message.postLink)
+  const escapedMessageText = escapeMarkdown(message.messageText)
+  const keyWords = escapeMarkdown(message.keyWords[0].join(', '))
+  const additionalWords = escapeMarkdown(message.keyWords[1]?.join(', ') ?? '')
+  const postLink = formatClickablePostLink(message.postLink)
 
   return (
-    `*Канал/чат:* ${channel}\n` +
-    `*Дата:* ${date}\n` +
-    `*Повідомлення:*\n\n` +
+    `**Канал/чат:** ${channel}\n` +
+    `**Дата:** ${date}\n` +
+    `**Повідомлення:**\n\n` +
     escapedMessageText +
     `\n\n\n` +
-    `*Ключові слова:* \n` +
+    `**Ключові слова:** \n` +
     keyWords +
     '   ___   ' +
     additionalWords +
     `\n` +
-    `*Посилання:* \n` +
+    `**Посилання:** \n` +
     postLink
   )
 }

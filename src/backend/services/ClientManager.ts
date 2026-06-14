@@ -1,4 +1,4 @@
-import { TelegramClient } from '@mtcute/bun'
+import { TelegramClient, type InputText } from '@mtcute/bun'
 import { Dispatcher } from '@mtcute/dispatcher'
 import type { PrismaClient } from '@prisma/client'
 
@@ -26,7 +26,7 @@ interface IMtcuteRuntimeClient extends IMtcuteSessionClient {
   checkPassword(password: string): Promise<unknown>
   getMe(): Promise<unknown>
   startUpdatesLoop(): void
-  sendText(chatId: string, text: string): Promise<unknown>
+  sendText(chatId: string, text: InputText): Promise<unknown>
   openChat?(chatId: string): Promise<unknown>
   getHistory?(
     chatId: string,

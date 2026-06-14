@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'preact/hooks'
 
 import type {
+  IChannelConfig,
   IConfigDto,
   IConfigUpdatePayload,
   IHistoryPayload,
   IHistoryResultDto
 } from '@shared/types'
 
-export type TListKey = 'channels' | 'keyWords' | 'additionalWords' | 'banWords'
+export type TListKey = 'keyWords' | 'additionalWords' | 'banWords'
 
 interface IUseDashboardConfigParams {
   config: IConfigDto
@@ -23,6 +24,8 @@ interface IUseDashboardConfigResult {
   setIsActive(value: boolean): void
   setStrictMode(value: boolean): void
   setHistoryDepthDays(value: number): void
+  addChannel(channel: IChannelConfig): void
+  removeChannel(value: string): void
   addListItem(key: TListKey, value: string): void
   removeListItem(key: TListKey, value: string): void
   save(): Promise<void>
@@ -54,6 +57,36 @@ export const useDashboardConfig = ({
     setDraft((current) => ({
       ...current,
       [key]: Array.from(new Set([...current[key], value.trim()].filter(Boolean)))
+    }))
+  }, [])
+
+  const addChannel = useCallback((channel: IChannelConfig) => {
+    const value = channel.value.trim()
+
+    if (!value) {
+      return
+    }
+
+    setDraft((current) => {
+      const channels = current.channels.filter((item) => item.value !== value)
+
+      return {
+        ...current,
+        channels: [
+          ...channels,
+          {
+            title: channel.title.trim(),
+            value
+          }
+        ]
+      }
+    })
+  }, [])
+
+  const removeChannel = useCallback((value: string) => {
+    setDraft((current) => ({
+      ...current,
+      channels: current.channels.filter((channel) => channel.value !== value)
     }))
   }, [])
 
@@ -91,6 +124,8 @@ export const useDashboardConfig = ({
     setIsActive: (isActive) => patchDraft({ isActive }),
     setStrictMode: (strictMode) => patchDraft({ strictMode }),
     setHistoryDepthDays: (historyDepthDays) => patchDraft({ historyDepthDays }),
+    addChannel,
+    removeChannel,
     addListItem,
     removeListItem,
     save,

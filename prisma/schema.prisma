@@ -48,6 +48,7 @@ model Config {
   targetChat       String?  @map("target_chat")
   isActive         Boolean  @default(false) @map("is_active")
   channels         String[] @default([])
+  channelItems     Json     @default("[]") @map("channel_items")
   keyWords         String[] @default([]) @map("key_words")
   strictMode       Boolean  @default(false) @map("strict_mode")
   additionalWords  String[] @default([]) @map("additional_words")

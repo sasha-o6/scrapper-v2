@@ -2,11 +2,16 @@ export type TQueueStatus = 'PENDING' | 'SENT' | 'FAILED'
 
 export type TAuthStep = 'phone' | 'code' | 'password' | 'authorized'
 
+export interface IChannelConfig {
+  title: string
+  value: string
+}
+
 export interface IConfigDto {
   telegramId: string
   targetChat: string
   isActive: boolean
-  channels: string[]
+  channels: IChannelConfig[]
   keyWords: string[]
   strictMode: boolean
   additionalWords: string[]
@@ -19,7 +24,7 @@ export interface IConfigDto {
 export interface IConfigUpdatePayload {
   targetChat?: string
   isActive?: boolean
-  channels?: string[]
+  channels?: IChannelConfig[]
   keyWords?: string[]
   strictMode?: boolean
   additionalWords?: string[]

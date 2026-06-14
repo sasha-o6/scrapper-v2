@@ -9,7 +9,17 @@ const ConfigUpdateSchema = z
   .object({
     targetChat: z.string().max(120).optional(),
     isActive: z.boolean().optional(),
-    channels: z.array(z.string().min(1).max(200)).max(100).optional(),
+    channels: z
+      .array(
+        z
+          .object({
+            title: z.string().max(120).optional().default(''),
+            value: z.string().min(1).max(200)
+          })
+          .strict()
+      )
+      .max(100)
+      .optional(),
     keyWords: z.array(z.string().min(1).max(100)).max(200).optional(),
     strictMode: z.boolean().optional(),
     additionalWords: z.array(z.string().min(1).max(100)).max(200).optional(),

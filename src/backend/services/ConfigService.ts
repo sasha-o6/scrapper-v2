@@ -1,6 +1,6 @@
 import type { Config, Prisma, PrismaClient } from '@prisma/client'
 
-import type { IConfigDto, IConfigUpdatePayload } from '@shared/types'
+import type { IChannelConfig, IConfigDto, IConfigUpdatePayload } from '@shared/types'
 
 const DEFAULT_HISTORY_DEPTH_DAYS = 1
 
@@ -11,6 +11,73 @@ const normalizeList = (items?: string[]): string[] | undefined => {
 
   return Array.from(new Set(items.map((item) => item.trim()).filter(Boolean)))
 }
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null
+
+const normalizeChannelItem = (item: unknown): IChannelConfig | null => {
+  if (typeof item === 'string') {
+    const value = item.trim()
+
+    return value ? { title: '', value } : null
+  }
+
+  if (!isRecord(item) || typeof item.value !== 'string') {
+    return null
+  }
+
+  const value = item.value.trim()
+
+  if (!value) {
+    return null
+  }
+
+  return {
+    title: typeof item.title === 'string' ? item.title.trim() : '',
+    value
+  }
+}
+
+const normalizeChannels = (items?: IChannelConfig[]): IChannelConfig[] | undefined => {
+  if (!items) {
+    return undefined
+  }
+
+  const channelMap = new Map<string, IChannelConfig>()
+
+  for (const item of items) {
+    const channel = normalizeChannelItem(item)
+
+    if (channel) {
+      channelMap.set(channel.value, channel)
+    }
+  }
+
+  return Array.from(channelMap.values())
+}
+
+const parseChannels = (
+  channelItems: Prisma.JsonValue,
+  legacyChannels: string[]
+): IChannelConfig[] => {
+  if (Array.isArray(channelItems)) {
+    const parsedChannels = channelItems
+      .map(normalizeChannelItem)
+      .filter((channel): channel is IChannelConfig => Boolean(channel))
+
+    if (parsedChannels.length > 0) {
+      return parsedChannels
+    }
+  }
+
+  return legacyChannels.map((value) => ({ title: '', value }))
+}
+
+const toChannelItemsJson = (channels: IChannelConfig[]): Prisma.InputJsonValue =>
+  channels.map((channel) => ({
+    title: channel.title,
+    value: channel.value
+  }))
 
 const normalizeTargetChat = (targetChat?: string): string | undefined => {
   if (targetChat === undefined) {
@@ -53,6 +120,7 @@ export class ConfigService {
         targetChat: data.targetChat as string | undefined,
         isActive: (data.isActive as boolean | undefined) ?? false,
         channels: (data.channels as string[] | undefined) ?? [],
+        channelItems: (data.channelItems as Prisma.InputJsonValue | undefined) ?? [],
         keyWords: (data.keyWords as string[] | undefined) ?? [],
         strictMode: (data.strictMode as boolean | undefined) ?? false,
         additionalWords: (data.additionalWords as string[] | undefined) ?? [],
@@ -100,7 +168,7 @@ export class ConfigService {
   private toUpdateData(payload: IConfigUpdatePayload): Prisma.ConfigUpdateInput {
     const data: Prisma.ConfigUpdateInput = {}
     const targetChat = normalizeTargetChat(payload.targetChat)
-    const channels = normalizeList(payload.channels)
+    const channels = normalizeChannels(payload.channels)
     const keyWords = normalizeList(payload.keyWords)
     const additionalWords = normalizeList(payload.additionalWords)
     const banWords = normalizeList(payload.banWords)
@@ -115,7 +183,8 @@ export class ConfigService {
     }
 
     if (channels !== undefined) {
-      data.channels = channels
+      data.channels = channels.map((channel) => channel.value)
+      data.channelItems = toChannelItemsJson(channels)
     }
 
     if (keyWords !== undefined) {
@@ -146,7 +215,7 @@ export class ConfigService {
       telegramId: telegramId.toString(),
       targetChat: config.targetChat ?? '',
       isActive: config.isActive,
-      channels: config.channels,
+      channels: parseChannels(config.channelItems, config.channels),
       keyWords: config.keyWords,
       strictMode: config.strictMode,
       additionalWords: config.additionalWords,

@@ -2,6 +2,7 @@ import { History, Pause, Play, Save, ShieldCheck } from 'lucide-preact'
 import { memo } from 'preact/compat'
 
 import { ArrayEditor } from '@frontend/components/ArrayEditor'
+import { ChannelEditor } from '@frontend/components/ChannelEditor'
 import { Toggle } from '@frontend/components/Toggle'
 import { useDashboardConfig } from '@frontend/hooks/useDashboardConfig'
 import styles from '@frontend/styles/App.module.scss'
@@ -67,12 +68,10 @@ export const Dashboard = memo(
         </section>
 
         <section className={styles.gridSection}>
-          <ArrayEditor
-            label="Канали"
-            placeholder="t.me/channel або ID"
+          <ChannelEditor
             items={dashboard.draft.channels}
-            onAdd={(value) => dashboard.addListItem('channels', value)}
-            onRemove={(value) => dashboard.removeListItem('channels', value)}
+            onAdd={dashboard.addChannel}
+            onRemove={dashboard.removeChannel}
           />
           <ArrayEditor
             label="Ключові слова"
@@ -80,21 +79,6 @@ export const Dashboard = memo(
             items={dashboard.draft.keyWords}
             onAdd={(value) => dashboard.addListItem('keyWords', value)}
             onRemove={(value) => dashboard.removeListItem('keyWords', value)}
-          />
-          <ArrayEditor
-            label="Додаткові слова"
-            placeholder="Обов'язкова умова"
-            items={dashboard.draft.additionalWords}
-            disabled={!dashboard.draft.strictMode}
-            onAdd={(value) => dashboard.addListItem('additionalWords', value)}
-            onRemove={(value) => dashboard.removeListItem('additionalWords', value)}
-          />
-          <ArrayEditor
-            label="Бан-слова"
-            placeholder="Блокувальник"
-            items={dashboard.draft.banWords}
-            onAdd={(value) => dashboard.addListItem('banWords', value)}
-            onRemove={(value) => dashboard.removeListItem('banWords', value)}
           />
         </section>
 
@@ -107,6 +91,25 @@ export const Dashboard = memo(
             checked={dashboard.draft.strictMode}
             label={dashboard.draft.strictMode ? 'Увімкнено' : 'Вимкнено'}
             onChange={dashboard.setStrictMode}
+          />
+        </section>
+
+        <section className={styles.gridSection}>
+          {dashboard.draft.strictMode ? (
+            <ArrayEditor
+              label="Додаткові слова"
+              placeholder="Обов'язкова умова"
+              items={dashboard.draft.additionalWords}
+              onAdd={(value) => dashboard.addListItem('additionalWords', value)}
+              onRemove={(value) => dashboard.removeListItem('additionalWords', value)}
+            />
+          ) : null}
+          <ArrayEditor
+            label="Бан-слова"
+            placeholder="Блокувальник"
+            items={dashboard.draft.banWords}
+            onAdd={(value) => dashboard.addListItem('banWords', value)}
+            onRemove={(value) => dashboard.removeListItem('banWords', value)}
           />
         </section>
 

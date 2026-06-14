@@ -1,0 +1,94 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum QueueStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+model User {
+  id         String   @id @default(uuid())
+  telegramId BigInt   @unique @map("telegram_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  config            Config?
+  session           Session?
+  messageQueue      MessageQueue[]
+  processedMessages ProcessedMessage[]
+
+  @@map("users")
+}
+
+model Session {
+  id            String    @id @default(uuid())
+  userId        String    @unique @map("user_id")
+  sessionString String?   @map("session_string")
+  phone         String?
+  phoneCodeHash String?   @map("phone_code_hash")
+  authorizedAt  DateTime? @map("authorized_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model Config {
+  id               String   @id @default(uuid())
+  userId           String   @unique @map("user_id")
+  targetChat       String?  @map("target_chat")
+  isActive         Boolean  @default(false) @map("is_active")
+  channels         String[] @default([])
+  keyWords         String[] @default([]) @map("key_words")
+  strictMode       Boolean  @default(false) @map("strict_mode")
+  additionalWords  String[] @default([]) @map("additional_words")
+  banWords         String[] @default([]) @map("ban_words")
+  historyDepthDays Int      @default(1) @map("history_depth_days")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("configs")
+}
+
+model MessageQueue {
+  id          String      @id @default(uuid())
+  userId      String      @map("user_id")
+  messageText String      @map("message_text")
+  status      QueueStatus @default(PENDING)
+  targetChat  String      @map("target_chat")
+  error       String?
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
+  sentAt      DateTime?   @map("sent_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+  @@index([userId, status])
+  @@map("message_queue")
+}
+
+model ProcessedMessage {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  channelId String   @map("channel_id")
+  messageId String   @map("message_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, channelId, messageId])
+  @@index([userId, channelId])
+  @@map("processed_messages")
+}

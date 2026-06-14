@@ -1,0 +1,42 @@
+{
+  "name": "telegram-monitoring-tma",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun run --hot src/backend/main.ts",
+    "dev:web": "vite --host 0.0.0.0",
+    "start": "bun src/backend/main.ts",
+    "build": "bun run build:web && bun run build:api",
+    "build:web": "vite build",
+    "build:api": "bun build src/backend/main.ts --target bun --outdir dist/server --external @prisma/client --external @mtcute/bun --external @mtcute/dispatcher",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:deploy": "prisma migrate deploy"
+  },
+  "dependencies": {
+    "@hono/zod-validator": "^0.7.0",
+    "@mtcute/bun": "^0.30.1",
+    "@mtcute/dispatcher": "^0.30.1",
+    "@prisma/client": "^6.9.0",
+    "clsx": "^2.1.1",
+    "hono": "^4.8.0",
+    "lucide-preact": "^0.468.0",
+    "preact": "^10.26.9",
+    "tailwind-merge": "^3.3.1",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@preact/preset-vite": "^2.10.2",
+    "@types/bun": "^1.2.16",
+    "autoprefixer": "^10.4.21",
+    "postcss": "^8.5.6",
+    "prisma": "^6.9.0",
+    "sass": "^1.89.2",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5"
+  }
+}

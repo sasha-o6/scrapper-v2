@@ -10,14 +10,31 @@ import {
 } from '@backend/services/DatabaseSessionStorageAdapter'
 import type { ScraperService } from '@backend/services/ScraperService'
 import { logger } from '@backend/utils/logger'
-import type { IAuthStatusDto, TAuthStep } from '@shared/types'
+import type {
+  IAuthCodeDeliveryDto,
+  IAuthStatusDto,
+  TAuthCodeDeliveryType,
+  TAuthCodeNextType,
+  TAuthStep
+} from '@shared/types'
 
-interface IMtcuteCodeResult {
+interface IMtcuteSentCodeResult {
   phoneCodeHash: string
+  type: TAuthCodeDeliveryType
+  nextType: TAuthCodeNextType
+  timeout: number
+  length: number
+  beginning?: string
 }
 
+type TMtcuteSendCodeResult = IMtcuteSentCodeResult | unknown
+
 interface IMtcuteRuntimeClient extends IMtcuteSessionClient {
-  sendCode(payload: { phone: string }): Promise<IMtcuteCodeResult>
+  sendCode(payload: { phone: string }): Promise<TMtcuteSendCodeResult>
+  resendCode(payload: {
+    phone: string
+    phoneCodeHash: string
+  }): Promise<IMtcuteSentCodeResult>
   signIn(payload: {
     phone: string
     phoneCodeHash: string
@@ -59,6 +76,14 @@ const isRpcError = (error: unknown, code: string): boolean => {
   }
 
   return error.message.includes(code) || error.name.includes(code)
+}
+
+const isSentCodeResult = (result: unknown): result is IMtcuteSentCodeResult => {
+  if (typeof result !== 'object' || result === null) {
+    return false
+  }
+
+  return typeof (result as { phoneCodeHash?: unknown }).phoneCodeHash === 'string'
 }
 
 const TelegramClientCtor = TelegramClient as unknown as ITelegramClientConstructor
@@ -127,6 +152,15 @@ export class ClientManager {
     const client = await this.preparePendingClient(userId)
     const result = await client.sendCode({ phone })
 
+    if (!isSentCodeResult(result)) {
+      await this.promoteAuthorizedClient(userId, client)
+
+      return {
+        step: 'authorized',
+        isAuthorized: true
+      }
+    }
+
     await this.db.session.upsert({
       where: { userId },
       create: {
@@ -140,9 +174,44 @@ export class ClientManager {
       }
     })
 
+    const codeDelivery = this.toCodeDelivery(result)
+    this.logCodeDelivery(userId, 'requested', codeDelivery)
+
     return {
       step: 'code',
-      isAuthorized: false
+      isAuthorized: false,
+      codeDelivery
+    }
+  }
+
+  public async resendCode(telegramId: bigint): Promise<IAuthStatusDto> {
+    const userId = await this.configService.getUserIdByTelegramId(telegramId)
+    const session = await this.db.session.findUnique({ where: { userId } })
+
+    if (!session?.phone || !session.phoneCodeHash) {
+      throw new Error('Phone code was not requested')
+    }
+
+    const client = await this.preparePendingClient(userId)
+    const result = await client.resendCode({
+      phone: session.phone,
+      phoneCodeHash: session.phoneCodeHash
+    })
+
+    await this.db.session.update({
+      where: { userId },
+      data: {
+        phoneCodeHash: result.phoneCodeHash
+      }
+    })
+
+    const codeDelivery = this.toCodeDelivery(result)
+    this.logCodeDelivery(userId, 'resent', codeDelivery)
+
+    return {
+      step: 'code',
+      isAuthorized: false,
+      codeDelivery
     }
   }
 
@@ -248,6 +317,30 @@ export class ClientManager {
         catchUp: true,
         messageGroupingInterval: 250
       }
+    })
+  }
+
+  private toCodeDelivery(result: IMtcuteSentCodeResult): IAuthCodeDeliveryDto {
+    return {
+      type: result.type,
+      nextType: result.nextType,
+      timeoutSeconds: result.timeout,
+      length: result.length,
+      beginning: result.beginning
+    }
+  }
+
+  private logCodeDelivery(
+    userId: string,
+    action: 'requested' | 'resent',
+    codeDelivery: IAuthCodeDeliveryDto
+  ): void {
+    logger.info(`Telegram auth code ${action}`, {
+      userId,
+      deliveryType: codeDelivery.type,
+      nextType: codeDelivery.nextType,
+      timeoutSeconds: codeDelivery.timeoutSeconds,
+      codeLength: codeDelivery.length
     })
   }
 

@@ -17,6 +17,8 @@ const SignInSchema = z
   })
   .strict()
 
+const ResendCodeSchema = z.object({}).strict()
+
 const PasswordSchema = z
   .object({
     password: z.string().min(1).max(256)
@@ -42,6 +44,12 @@ export const createAuthRoutes = (clientManager: ClientManager): Hono<TAppEnv> =>
   route.post('/auth/sign-in', zValidator('json', SignInSchema), async (context) => {
     const payload = context.req.valid('json')
     const status = await clientManager.signIn(context.get('telegramId'), payload.code)
+
+    return context.json(status)
+  })
+
+  route.post('/auth/resend-code', zValidator('json', ResendCodeSchema), async (context) => {
+    const status = await clientManager.resendCode(context.get('telegramId'))
 
     return context.json(status)
   })

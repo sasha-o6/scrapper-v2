@@ -2,6 +2,22 @@ export type TQueueStatus = 'PENDING' | 'SENT' | 'FAILED'
 
 export type TAuthStep = 'phone' | 'code' | 'password' | 'authorized'
 
+export type TAuthCodeDeliveryType =
+  | 'app'
+  | 'sms'
+  | 'call'
+  | 'flash_call'
+  | 'missed_call'
+  | 'email'
+  | 'email_required'
+  | 'fragment'
+  | 'firebase'
+  | 'sms_word'
+  | 'sms_phrase'
+  | 'success'
+
+export type TAuthCodeNextType = Exclude<TAuthCodeDeliveryType, 'app'> | 'none'
+
 export interface IChannelConfig {
   title: string
   value: string
@@ -35,6 +51,15 @@ export interface IConfigUpdatePayload {
 export interface IAuthStatusDto {
   step: TAuthStep
   isAuthorized: boolean
+  codeDelivery?: IAuthCodeDeliveryDto
+}
+
+export interface IAuthCodeDeliveryDto {
+  type: TAuthCodeDeliveryType
+  nextType: TAuthCodeNextType
+  timeoutSeconds: number
+  length: number
+  beginning?: string
 }
 
 export interface ISendCodePayload {
@@ -44,6 +69,8 @@ export interface ISendCodePayload {
 export interface ISignInPayload {
   code: string
 }
+
+export type IResendCodePayload = Record<string, never>
 
 export interface IPasswordPayload {
   password: string

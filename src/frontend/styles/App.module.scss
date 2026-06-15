@@ -64,7 +64,7 @@
 
 .input,
 .inputWithIcon {
-  @apply h-11 rounded-md border border-line bg-white px-3 text-sm text-ink outline-none transition-[box-shadow,border-color] duration-150;
+  @apply h-11 rounded-md border border-line bg-white px-3 text-base text-ink outline-none transition-[box-shadow,border-color] duration-150;
 }
 
 .input {
@@ -151,6 +151,10 @@
 
 .authForm {
   @apply flex max-w-md flex-col gap-4;
+}
+
+.authActions {
+  @apply flex items-center gap-3 max-sm:flex-col max-sm:items-stretch;
 }
 
 .list {

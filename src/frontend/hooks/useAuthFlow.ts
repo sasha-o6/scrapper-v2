@@ -24,6 +24,7 @@ export interface IUseAuthFlowResult {
   setPhone(value: string): void
   setCode(value: string): void
   setPassword(value: string): void
+  returnToPhone(): void
   submitPhone(): Promise<void>
   submitCode(): Promise<void>
   submitPassword(): Promise<void>
@@ -95,6 +96,13 @@ export const useAuthFlow = ({
     [password, submit]
   )
 
+  const returnToPhone = useCallback(() => {
+    setStep('phone')
+    setCode('')
+    setPassword('')
+    setError('')
+  }, [])
+
   useEffect(() => {
     let isMounted = true
 
@@ -126,6 +134,7 @@ export const useAuthFlow = ({
     setPhone,
     setCode,
     setPassword,
+    returnToPhone,
     submitPhone,
     submitCode,
     submitPassword

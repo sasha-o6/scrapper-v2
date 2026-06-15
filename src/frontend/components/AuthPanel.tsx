@@ -1,4 +1,4 @@
-import { KeyRound, LogIn, MessageSquareCode, Phone } from 'lucide-preact'
+import { ArrowLeft, KeyRound, LogIn, MessageSquareCode, Phone } from 'lucide-preact'
 import { memo } from 'preact/compat'
 
 import type { IUseAuthFlowResult } from '@frontend/hooks/useAuthFlow'
@@ -81,10 +81,23 @@ export const AuthPanel = memo(({ authFlow }: IAuthPanelProps) => {
           </div>
         </label>
         {authFlow.error ? <p className={styles.errorText}>{authFlow.error}</p> : null}
-        <button className={styles.primaryButton} type="submit" disabled={authFlow.isSubmitting}>
-          <LogIn size={18} />
-          <span>{authFlow.isSubmitting ? 'Зачекайте' : 'Продовжити'}</span>
-        </button>
+        <div className={styles.authActions}>
+          {authFlow.step !== 'phone' ? (
+            <button
+              className={styles.secondaryButton}
+              type="button"
+              disabled={authFlow.isSubmitting}
+              onClick={authFlow.returnToPhone}
+            >
+              <ArrowLeft size={18} />
+              <span>Змінити номер</span>
+            </button>
+          ) : null}
+          <button className={styles.primaryButton} type="submit" disabled={authFlow.isSubmitting}>
+            <LogIn size={18} />
+            <span>{authFlow.isSubmitting ? 'Зачекайте' : 'Продовжити'}</span>
+          </button>
+        </div>
       </form>
     </section>
   )

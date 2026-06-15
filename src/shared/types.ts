@@ -1,26 +1,24 @@
 export type TQueueStatus = 'PENDING' | 'SENT' | 'FAILED'
 
-export type TAuthStep = 'phone' | 'code' | 'password' | 'authorized'
+export type TSystemAuthStatus =
+  | 'AUTH_PENDING'
+  | 'CODE_SENT'
+  | 'PASSWORD_PENDING'
+  | 'LOGGED_IN'
 
-export type TAuthCodeDeliveryType =
-  | 'app'
-  | 'sms'
-  | 'call'
-  | 'flash_call'
-  | 'missed_call'
-  | 'email'
-  | 'email_required'
-  | 'fragment'
-  | 'firebase'
-  | 'sms_word'
-  | 'sms_phrase'
-  | 'success'
-
-export type TAuthCodeNextType = Exclude<TAuthCodeDeliveryType, 'app'> | 'none'
+export type TChannelJoinStatus =
+  | 'PENDING'
+  | 'JOINED'
+  | 'REQUEST_SENT'
+  | 'WEBVIEW_REQUIRED'
+  | 'FAILED'
 
 export interface IChannelConfig {
   title: string
   value: string
+  joinStatus?: TChannelJoinStatus
+  joinError?: string
+  joinedAt?: string
 }
 
 export interface IConfigDto {
@@ -34,6 +32,7 @@ export interface IConfigDto {
   banWords: string[]
   historyDepthDays: number
   isAuthorized: boolean
+  systemStatus: TSystemAuthStatus
   updatedAt: string
 }
 
@@ -46,34 +45,6 @@ export interface IConfigUpdatePayload {
   additionalWords?: string[]
   banWords?: string[]
   historyDepthDays?: number
-}
-
-export interface IAuthStatusDto {
-  step: TAuthStep
-  isAuthorized: boolean
-  codeDelivery?: IAuthCodeDeliveryDto
-}
-
-export interface IAuthCodeDeliveryDto {
-  type: TAuthCodeDeliveryType
-  nextType: TAuthCodeNextType
-  timeoutSeconds: number
-  length: number
-  beginning?: string
-}
-
-export interface ISendCodePayload {
-  phone: string
-}
-
-export interface ISignInPayload {
-  code: string
-}
-
-export type IResendCodePayload = Record<string, never>
-
-export interface IPasswordPayload {
-  password: string
 }
 
 export interface IHistoryPayload {

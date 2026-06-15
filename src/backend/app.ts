@@ -3,7 +3,7 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 
 import { createAuthMiddleware } from '@backend/middleware/auth'
-import { createAuthRoutes } from '@backend/routes/auth'
+import { createAdminLoginRoutes } from '@backend/routes/adminLogin'
 import { createConfigRoutes } from '@backend/routes/config'
 import { createHistoryRoutes } from '@backend/routes/history'
 import { services } from '@backend/services/container'
@@ -30,10 +30,10 @@ app.get('/api/health', (context) =>
 const protectedApi = new Hono<TAppEnv>()
 protectedApi.use('*', createAuthMiddleware(services.configService))
 protectedApi.route('/', createConfigRoutes(services.configService))
-protectedApi.route('/', createAuthRoutes(services.clientManager))
 protectedApi.route('/', createHistoryRoutes(services.historicalFetcher))
 
 app.route('/api', protectedApi)
+app.route('/', createAdminLoginRoutes(services.adminLoginWebService))
 
 app.get('/assets/*', serveStatic({ root: './dist/client' }))
 app.get('/favicon.ico', serveStatic({ path: './dist/client/favicon.ico' }))

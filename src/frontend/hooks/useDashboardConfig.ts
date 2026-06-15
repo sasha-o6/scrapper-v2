@@ -8,6 +8,11 @@ import type {
   IHistoryResultDto
 } from '@shared/types'
 
+interface IPendingChannelState {
+  title: string
+  value: string
+}
+
 export type TListKey = 'keyWords' | 'additionalWords' | 'banWords'
 
 interface IUseDashboardConfigParams {
@@ -20,10 +25,13 @@ interface IUseDashboardConfigResult {
   draft: IConfigDto
   isDirty: boolean
   historyMessage: string
+  pendingChannel: IPendingChannelState
   setTargetChat(value: string): void
   setIsActive(value: boolean): void
   setStrictMode(value: boolean): void
   setHistoryDepthDays(value: number): void
+  setPendingChannelTitle(value: string): void
+  setPendingChannelValue(value: string): void
   addChannel(channel: IChannelConfig): void
   removeChannel(value: string): void
   addListItem(key: TListKey, value: string): void
@@ -38,13 +46,24 @@ export const useDashboardConfig = ({
   onCollectHistory
 }: IUseDashboardConfigParams): IUseDashboardConfigResult => {
   const [draft, setDraft] = useState(config)
+  const [pendingChannel, setPendingChannel] = useState<IPendingChannelState>({
+    title: '',
+    value: ''
+  })
   const [historyMessage, setHistoryMessage] = useState('')
 
   useEffect(() => {
     setDraft(config)
   }, [config])
 
-  const isDirty = useMemo(() => JSON.stringify(draft) !== JSON.stringify(config), [config, draft])
+  const hasPendingChannel = useMemo(
+    () => pendingChannel.value.trim().length > 0,
+    [pendingChannel.value]
+  )
+  const isDirty = useMemo(
+    () => hasPendingChannel || JSON.stringify(draft) !== JSON.stringify(config),
+    [config, draft, hasPendingChannel]
+  )
 
   const patchDraft = useCallback((payload: Partial<IConfigDto>) => {
     setDraft((current) => ({
@@ -60,27 +79,46 @@ export const useDashboardConfig = ({
     }))
   }, [])
 
-  const addChannel = useCallback((channel: IChannelConfig) => {
+  const mergeChannel = useCallback((items: IChannelConfig[], channel: IChannelConfig) => {
     const value = channel.value.trim()
 
     if (!value) {
-      return
+      return items
     }
 
-    setDraft((current) => {
-      const channels = current.channels.filter((item) => item.value !== value)
+    const channels = items.filter((item) => item.value !== value)
 
-      return {
-        ...current,
-        channels: [
-          ...channels,
-          {
-            title: channel.title.trim(),
-            value
-          }
-        ]
+    return [
+      ...channels,
+      {
+        title: channel.title.trim(),
+        value
       }
-    })
+    ]
+  }, [])
+
+  const addChannel = useCallback((channel: IChannelConfig) => {
+    setDraft((current) => ({
+      ...current,
+      channels: mergeChannel(current.channels, channel)
+    }))
+    setPendingChannel({ title: '', value: '' })
+  }, [mergeChannel])
+
+  const getChannelsForSave = useCallback(() => {
+    if (!hasPendingChannel) {
+      return draft.channels
+    }
+
+    return mergeChannel(draft.channels, pendingChannel)
+  }, [draft.channels, hasPendingChannel, mergeChannel, pendingChannel])
+
+  const setPendingChannelTitle = useCallback((title: string) => {
+    setPendingChannel((current) => ({ ...current, title }))
+  }, [])
+
+  const setPendingChannelValue = useCallback((value: string) => {
+    setPendingChannel((current) => ({ ...current, value }))
   }, [])
 
   const removeChannel = useCallback((value: string) => {
@@ -98,10 +136,14 @@ export const useDashboardConfig = ({
   }, [])
 
   const save = useCallback(async () => {
+    const channels = getChannelsForSave()
     const nextConfig = await onSave({
       targetChat: draft.targetChat,
       isActive: draft.isActive,
-      channels: draft.channels,
+      channels: channels.map((channel) => ({
+        title: channel.title,
+        value: channel.value
+      })),
       keyWords: draft.keyWords,
       strictMode: draft.strictMode,
       additionalWords: draft.additionalWords,
@@ -109,7 +151,8 @@ export const useDashboardConfig = ({
       historyDepthDays: draft.historyDepthDays
     })
     setDraft(nextConfig)
-  }, [draft, onSave])
+    setPendingChannel({ title: '', value: '' })
+  }, [draft, getChannelsForSave, onSave])
 
   const collectHistory = useCallback(async () => {
     const result = await onCollectHistory({ days: draft.historyDepthDays })
@@ -120,10 +163,13 @@ export const useDashboardConfig = ({
     draft,
     isDirty,
     historyMessage,
+    pendingChannel,
     setTargetChat: (targetChat) => patchDraft({ targetChat }),
     setIsActive: (isActive) => patchDraft({ isActive }),
     setStrictMode: (strictMode) => patchDraft({ strictMode }),
     setHistoryDepthDays: (historyDepthDays) => patchDraft({ historyDepthDays }),
+    setPendingChannelTitle,
+    setPendingChannelValue,
     addChannel,
     removeChannel,
     addListItem,

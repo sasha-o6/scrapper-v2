@@ -13,6 +13,13 @@ enum QueueStatus {
   FAILED
 }
 
+enum SystemAuthStatus {
+  AUTH_PENDING
+  CODE_SENT
+  PASSWORD_PENDING
+  LOGGED_IN
+}
+
 model User {
   id         String   @id @default(uuid())
   telegramId BigInt   @unique @map("telegram_id")
@@ -20,26 +27,23 @@ model User {
   updatedAt  DateTime @updatedAt @map("updated_at")
 
   config            Config?
-  session           Session?
   messageQueue      MessageQueue[]
   processedMessages ProcessedMessage[]
 
   @@map("users")
 }
 
-model Session {
-  id            String    @id @default(uuid())
-  userId        String    @unique @map("user_id")
-  sessionString String?   @map("session_string")
+model SystemState {
+  id            Int              @id @default(1)
+  sessionString String?          @map("session_string")
   phone         String?
-  phoneCodeHash String?   @map("phone_code_hash")
-  authorizedAt  DateTime? @map("authorized_at")
-  createdAt     DateTime  @default(now()) @map("created_at")
-  updatedAt     DateTime  @updatedAt @map("updated_at")
+  phoneCodeHash String?          @map("phone_code_hash")
+  authStatus    SystemAuthStatus @default(AUTH_PENDING) @map("auth_status")
+  authorizedAt  DateTime?        @map("authorized_at")
+  createdAt     DateTime         @default(now()) @map("created_at")
+  updatedAt     DateTime         @updatedAt @map("updated_at")
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@map("sessions")
+  @@map("system_state")
 }
 
 model Config {

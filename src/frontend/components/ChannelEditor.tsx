@@ -1,12 +1,16 @@
-import { Plus, Trash2 } from 'lucide-preact'
+import { AlertTriangle, CheckCircle2, Clock3, Plus, ShieldAlert, Trash2 } from 'lucide-preact'
 import { memo } from 'preact/compat'
-import { useCallback, useState } from 'preact/hooks'
+import { useCallback } from 'preact/hooks'
 
 import styles from '@frontend/styles/App.module.scss'
-import type { IChannelConfig } from '@shared/types'
+import type { IChannelConfig, TChannelJoinStatus } from '@shared/types'
 
 interface IChannelEditorProps {
   items: IChannelConfig[]
+  title: string
+  value: string
+  onTitleChange(value: string): void
+  onValueChange(value: string): void
   onAdd(channel: IChannelConfig): void
   onRemove(value: string): void
 }
@@ -14,10 +18,39 @@ interface IChannelEditorProps {
 const formatChannelLabel = (channel: IChannelConfig): string =>
   channel.title ? `${channel.title} (${channel.value})` : channel.value
 
-export const ChannelEditor = memo(({ items, onAdd, onRemove }: IChannelEditorProps) => {
-  const [title, setTitle] = useState('')
-  const [value, setValue] = useState('')
+const JOIN_STATUS_LABELS: Record<TChannelJoinStatus, string> = {
+  PENDING: 'Очікує',
+  JOINED: 'Доєднано',
+  REQUEST_SENT: 'Запит',
+  WEBVIEW_REQUIRED: 'Перевірка',
+  FAILED: 'Помилка'
+}
 
+const getStatusIcon = (status: TChannelJoinStatus) => {
+  if (status === 'JOINED') {
+    return <CheckCircle2 size={14} />
+  }
+
+  if (status === 'FAILED') {
+    return <AlertTriangle size={14} />
+  }
+
+  if (status === 'WEBVIEW_REQUIRED') {
+    return <ShieldAlert size={14} />
+  }
+
+  return <Clock3 size={14} />
+}
+
+export const ChannelEditor = memo(({
+  items,
+  title,
+  value,
+  onTitleChange,
+  onValueChange,
+  onAdd,
+  onRemove
+}: IChannelEditorProps) => {
   const submit = useCallback(() => {
     const nextValue = value.trim()
 
@@ -29,8 +62,6 @@ export const ChannelEditor = memo(({ items, onAdd, onRemove }: IChannelEditorPro
       title,
       value: nextValue
     })
-    setTitle('')
-    setValue('')
   }, [onAdd, title, value])
 
   return (
@@ -44,7 +75,7 @@ export const ChannelEditor = memo(({ items, onAdd, onRemove }: IChannelEditorPro
           className={styles.input}
           value={title}
           placeholder="Назва каналу"
-          onInput={(event) => setTitle(event.currentTarget.value)}
+          onInput={(event) => onTitleChange(event.currentTarget.value)}
           onKeyDown={(event) => {
             if (event.key === 'Enter') {
               submit()
@@ -55,7 +86,7 @@ export const ChannelEditor = memo(({ items, onAdd, onRemove }: IChannelEditorPro
           className={styles.input}
           value={value}
           placeholder="Посилання або ID"
-          onInput={(event) => setValue(event.currentTarget.value)}
+          onInput={(event) => onValueChange(event.currentTarget.value)}
           onKeyDown={(event) => {
             if (event.key === 'Enter') {
               submit()
@@ -67,19 +98,32 @@ export const ChannelEditor = memo(({ items, onAdd, onRemove }: IChannelEditorPro
         </button>
       </div>
       <div className={styles.list}>
-        {items.map((item) => (
-          <div className={styles.listItem} key={item.value}>
-            <span>{formatChannelLabel(item)}</span>
-            <button
-              className={styles.ghostIconButton}
-              type="button"
-              title="Видалити"
-              onClick={() => onRemove(item.value)}
-            >
-              <Trash2 size={16} />
-            </button>
-          </div>
-        ))}
+        {items.map((item) => {
+          const joinStatus = item.joinStatus ?? 'PENDING'
+
+          return (
+            <div className={styles.channelItem} key={item.value}>
+              <div className={styles.channelMeta}>
+                <span>{formatChannelLabel(item)}</span>
+                <span className={styles.channelStatus} data-status={joinStatus}>
+                  {getStatusIcon(joinStatus)}
+                  {JOIN_STATUS_LABELS[joinStatus]}
+                </span>
+                {item.joinError ? (
+                  <small className={styles.channelError}>{item.joinError}</small>
+                ) : null}
+              </div>
+              <button
+                className={styles.ghostIconButton}
+                type="button"
+                title="Видалити"
+                onClick={() => onRemove(item.value)}
+              >
+                <Trash2 size={16} />
+              </button>
+            </div>
+          )
+        })}
       </div>
     </section>
   )

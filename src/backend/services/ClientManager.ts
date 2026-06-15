@@ -1,22 +1,52 @@
 import { TelegramClient, type InputText } from '@mtcute/bun'
 import { Dispatcher } from '@mtcute/dispatcher'
-import type { PrismaClient } from '@prisma/client'
 
 import { env } from '@backend/env'
-import { ConfigService } from '@backend/services/ConfigService'
-import {
-  DatabaseSessionStorageAdapter,
-  type IMtcuteSessionClient
-} from '@backend/services/DatabaseSessionStorageAdapter'
+import type { IChannelJoinResult } from '@backend/services/ConfigService'
 import type { ScraperService } from '@backend/services/ScraperService'
+import { SystemSessionStorageAdapter } from '@backend/services/SystemSessionStorageAdapter'
+import type { IMtcuteSessionClient } from '@backend/services/SystemSessionStorageAdapter'
+import type { SystemStateService } from '@backend/services/SystemStateService'
+import {
+  getMtcutePeerCandidates,
+  getPrimaryMtcutePeerInput,
+  isNumericTelegramRef,
+  isTelegramInternalChannelLink,
+  type TTelegramPeerInput
+} from '@backend/services/TelegramPeerRef'
 import { logger } from '@backend/utils/logger'
-import type {
-  IAuthCodeDeliveryDto,
-  IAuthStatusDto,
-  TAuthCodeDeliveryType,
-  TAuthCodeNextType,
-  TAuthStep
-} from '@shared/types'
+import type { TSystemAuthStatus } from '@shared/types'
+
+type TAuthCodeDeliveryType =
+  | 'app'
+  | 'sms'
+  | 'call'
+  | 'flash_call'
+  | 'missed_call'
+  | 'email'
+  | 'email_required'
+  | 'fragment'
+  | 'firebase'
+  | 'sms_word'
+  | 'sms_phrase'
+  | 'success'
+
+type TAuthCodeNextType = Exclude<TAuthCodeDeliveryType, 'app'> | 'none'
+
+type TAdminAuthStep = 'code' | 'password' | 'authorized'
+
+interface IAuthCodeDeliveryDto {
+  type: TAuthCodeDeliveryType
+  nextType: TAuthCodeNextType
+  timeoutSeconds: number
+  length: number
+  beginning?: string
+}
+
+export interface IAdminAuthResult {
+  step: TAdminAuthStep
+  codeDelivery?: IAuthCodeDeliveryDto
+}
 
 interface IMtcuteSentCodeResult {
   phoneCodeHash: string
@@ -29,12 +59,12 @@ interface IMtcuteSentCodeResult {
 
 type TMtcuteSendCodeResult = IMtcuteSentCodeResult | unknown
 
+interface IMtcuteJoinChatResult {
+  status: 'ok' | 'request_sent' | 'webview'
+}
+
 interface IMtcuteRuntimeClient extends IMtcuteSessionClient {
   sendCode(payload: { phone: string }): Promise<TMtcuteSendCodeResult>
-  resendCode(payload: {
-    phone: string
-    phoneCodeHash: string
-  }): Promise<IMtcuteSentCodeResult>
   signIn(payload: {
     phone: string
     phoneCodeHash: string
@@ -43,10 +73,12 @@ interface IMtcuteRuntimeClient extends IMtcuteSessionClient {
   checkPassword(password: string): Promise<unknown>
   getMe(): Promise<unknown>
   startUpdatesLoop(): void
-  sendText(chatId: string, text: InputText): Promise<unknown>
-  openChat?(chatId: string): Promise<unknown>
+  sendText(chatId: TTelegramPeerInput, text: InputText): Promise<unknown>
+  joinChat(chatId: TTelegramPeerInput): Promise<IMtcuteJoinChatResult>
+  getChat?(chatId: TTelegramPeerInput): Promise<unknown>
+  openChat?(chatId: TTelegramPeerInput): Promise<unknown>
   getHistory?(
-    chatId: string,
+    chatId: TTelegramPeerInput,
     options: { limit: number; offset?: { id: number; date: number } }
   ): Promise<unknown[]>
 }
@@ -70,13 +102,8 @@ interface IDispatcherFactory {
   for(client: unknown): IDispatcher
 }
 
-const isRpcError = (error: unknown, code: string): boolean => {
-  if (!(error instanceof Error)) {
-    return false
-  }
-
-  return error.message.includes(code) || error.name.includes(code)
-}
+const TelegramClientCtor = TelegramClient as unknown as ITelegramClientConstructor
+const DispatcherFactory = Dispatcher as unknown as IDispatcherFactory
 
 const isSentCodeResult = (result: unknown): result is IMtcuteSentCodeResult => {
   if (typeof result !== 'object' || result === null) {
@@ -86,225 +113,263 @@ const isSentCodeResult = (result: unknown): result is IMtcuteSentCodeResult => {
   return typeof (result as { phoneCodeHash?: unknown }).phoneCodeHash === 'string'
 }
 
-const TelegramClientCtor = TelegramClient as unknown as ITelegramClientConstructor
-const DispatcherFactory = Dispatcher as unknown as IDispatcherFactory
+const getErrorText = (error: unknown): string => {
+  if (error instanceof Error) {
+    return `${error.name} ${error.message}`
+  }
+
+  return String(error)
+}
+
+const hasRpcCode = (error: unknown, code: string): boolean =>
+  getErrorText(error).toLocaleUpperCase('en-US').includes(code)
+
+const getFloodWaitSeconds = (error: unknown): number | null => {
+  const text = getErrorText(error)
+  const match = text.match(/FLOOD_WAIT_?(\d+)?/i)
+
+  if (match?.[1]) {
+    return Number(match[1])
+  }
+
+  if (typeof error === 'object' && error !== null) {
+    const seconds = (error as { seconds?: unknown }).seconds
+
+    if (typeof seconds === 'number' && Number.isFinite(seconds)) {
+      return seconds
+    }
+  }
+
+  return null
+}
+
+const isPrivateInviteLink = (value: string): boolean => {
+  const normalizedValue = value.trim().toLocaleLowerCase('en-US')
+
+  return (
+    /^(https?:\/\/)?(t\.me|telegram\.me)\/\+/.test(normalizedValue) ||
+    /^(https?:\/\/)?(t\.me|telegram\.me)\/joinchat\//.test(normalizedValue)
+  )
+}
+
+const shouldCheckExistingChatAccess = (value: string): boolean =>
+  isNumericTelegramRef(value) || isPrivateInviteLink(value) || isTelegramInternalChannelLink(value)
 
 export class ClientManager {
-  private readonly clients = new Map<string, IMtcuteRuntimeClient>()
+  private client: IMtcuteRuntimeClient | null = null
 
-  private readonly pendingClients = new Map<string, IMtcuteRuntimeClient>()
+  private pendingClient: IMtcuteRuntimeClient | null = null
 
-  private readonly dispatchers = new Map<string, IDispatcher>()
+  private dispatcher: IDispatcher | null = null
 
-  private readonly configService: ConfigService
-
-  private readonly sessionStorage: DatabaseSessionStorageAdapter
+  private readonly sessionStorage: SystemSessionStorageAdapter
 
   public constructor(
-    private readonly db: PrismaClient,
-    private readonly scraperService: ScraperService
+    private readonly scraperService: ScraperService,
+    private readonly systemStateService: SystemStateService
   ) {
-    this.configService = new ConfigService(db)
-    this.sessionStorage = new DatabaseSessionStorageAdapter(db)
+    this.sessionStorage = new SystemSessionStorageAdapter(systemStateService)
   }
 
   public async restoreAuthorizedClients(): Promise<void> {
-    const sessions = await this.db.session.findMany({
-      where: {
-        sessionString: {
-          not: null
-        }
-      }
-    })
+    const state = await this.systemStateService.ensureState()
 
-    await Promise.all(
-      sessions.map(async (session) => {
-        try {
-          const client = this.createClient()
-          await this.sessionStorage.importForUser(session.userId, client)
-          await client.getMe()
-          client.startUpdatesLoop()
-          this.clients.set(session.userId, client)
-          this.attachMessageListener(session.userId, client)
-        } catch (error) {
-          logger.warn('Failed to restore Telegram client', {
-            userId: session.userId,
-            error: error instanceof Error ? error.message : String(error)
-          })
-        }
+    if (!state.sessionString) {
+      await this.systemStateService.update({ authStatus: 'AUTH_PENDING' })
+
+      return
+    }
+
+    try {
+      const client = this.createClient()
+      await client.importSession(state.sessionString)
+      await this.activateClient(client)
+      await this.systemStateService.update({ authStatus: 'LOGGED_IN' })
+    } catch (error) {
+      this.client = null
+      this.dispatcher = null
+      await this.systemStateService.update({ authStatus: 'AUTH_PENDING' })
+      logger.warn('Failed to restore central Telegram userbot', {
+        error: error instanceof Error ? error.message : String(error)
       })
-    )
-  }
-
-  public async getAuthStatus(telegramId: bigint): Promise<IAuthStatusDto> {
-    const userId = await this.configService.getUserIdByTelegramId(telegramId)
-    const session = await this.db.session.findUnique({ where: { userId } })
-    const isAuthorized = Boolean(session?.sessionString)
-
-    return {
-      step: isAuthorized ? 'authorized' : this.getPendingStep(userId),
-      isAuthorized
     }
   }
 
-  public async sendCode(telegramId: bigint, phone: string): Promise<IAuthStatusDto> {
-    const userId = await this.configService.getUserIdByTelegramId(telegramId)
-    const client = await this.preparePendingClient(userId)
-    const result = await client.sendCode({ phone })
+  public async getSystemClient(): Promise<IMtcuteRuntimeClient | null> {
+    if (this.client) {
+      return this.client
+    }
+
+    const state = await this.systemStateService.ensureState()
+
+    if (!state.sessionString) {
+      return null
+    }
+
+    const client = this.createClient()
+    await client.importSession(state.sessionString)
+    await this.activateClient(client)
+    await this.systemStateService.update({ authStatus: 'LOGGED_IN' })
+
+    return client
+  }
+
+  public async isAuthorized(): Promise<boolean> {
+    return this.systemStateService.isLoggedIn()
+  }
+
+  public async getAuthStatus(): Promise<TSystemAuthStatus> {
+    return this.systemStateService.getStatus()
+  }
+
+  public async sendCodeToAdmin(): Promise<IAdminAuthResult> {
+    const client = await this.preparePendingClient()
+    const result = await client.sendCode({ phone: env.adminPhone })
 
     if (!isSentCodeResult(result)) {
-      await this.promoteAuthorizedClient(userId, client)
+      await this.promoteAuthorizedClient(client)
 
       return {
-        step: 'authorized',
-        isAuthorized: true
+        step: 'authorized'
       }
     }
 
-    await this.db.session.upsert({
-      where: { userId },
-      create: {
-        userId,
-        phone,
-        phoneCodeHash: result.phoneCodeHash
-      },
-      update: {
-        phone,
-        phoneCodeHash: result.phoneCodeHash
-      }
+    await this.systemStateService.update({
+      phone: env.adminPhone,
+      phoneCodeHash: result.phoneCodeHash,
+      authStatus: 'CODE_SENT'
     })
 
-    const codeDelivery = this.toCodeDelivery(result)
-    this.logCodeDelivery(userId, 'requested', codeDelivery)
+    this.logCodeDelivery(result)
 
     return {
       step: 'code',
-      isAuthorized: false,
-      codeDelivery
+      codeDelivery: this.toCodeDelivery(result)
     }
   }
 
-  public async resendCode(telegramId: bigint): Promise<IAuthStatusDto> {
-    const userId = await this.configService.getUserIdByTelegramId(telegramId)
-    const session = await this.db.session.findUnique({ where: { userId } })
+  public async signInWithCode(code: string): Promise<IAdminAuthResult> {
+    const state = await this.systemStateService.ensureState()
 
-    if (!session?.phone || !session.phoneCodeHash) {
+    if (!state.phone || !state.phoneCodeHash) {
       throw new Error('Phone code was not requested')
     }
 
-    const client = await this.preparePendingClient(userId)
-    const result = await client.resendCode({
-      phone: session.phone,
-      phoneCodeHash: session.phoneCodeHash
-    })
-
-    await this.db.session.update({
-      where: { userId },
-      data: {
-        phoneCodeHash: result.phoneCodeHash
-      }
-    })
-
-    const codeDelivery = this.toCodeDelivery(result)
-    this.logCodeDelivery(userId, 'resent', codeDelivery)
-
-    return {
-      step: 'code',
-      isAuthorized: false,
-      codeDelivery
-    }
-  }
-
-  public async signIn(telegramId: bigint, code: string): Promise<IAuthStatusDto> {
-    const userId = await this.configService.getUserIdByTelegramId(telegramId)
-    const session = await this.db.session.findUnique({ where: { userId } })
-
-    if (!session?.phone || !session.phoneCodeHash) {
-      throw new Error('Phone code was not requested')
-    }
-
-    const client = await this.preparePendingClient(userId)
+    const client = await this.preparePendingClient()
 
     try {
       await client.signIn({
-        phone: session.phone,
-        phoneCodeHash: session.phoneCodeHash,
+        phone: state.phone,
+        phoneCodeHash: state.phoneCodeHash,
         phoneCode: code
       })
     } catch (error) {
-      if (isRpcError(error, 'SESSION_PASSWORD_NEEDED')) {
+      if (hasRpcCode(error, 'SESSION_PASSWORD_NEEDED')) {
+        await this.systemStateService.update({ authStatus: 'PASSWORD_PENDING' })
+
         return {
-          step: 'password',
-          isAuthorized: false
+          step: 'password'
         }
       }
 
       throw error
     }
 
-    await this.promoteAuthorizedClient(userId, client)
+    await this.promoteAuthorizedClient(client)
 
     return {
-      step: 'authorized',
-      isAuthorized: true
+      step: 'authorized'
     }
   }
 
-  public async checkPassword(telegramId: bigint, password: string): Promise<IAuthStatusDto> {
-    const userId = await this.configService.getUserIdByTelegramId(telegramId)
-    const client = await this.preparePendingClient(userId)
+  public async checkPassword(password: string): Promise<IAdminAuthResult> {
+    const client = await this.preparePendingClient()
     await client.checkPassword(password)
-    await this.promoteAuthorizedClient(userId, client)
+    await this.promoteAuthorizedClient(client)
 
     return {
-      step: 'authorized',
-      isAuthorized: true
+      step: 'authorized'
     }
   }
 
-  public async getClientForUserId(userId: string): Promise<IMtcuteRuntimeClient | null> {
-    const cachedClient = this.clients.get(userId)
+  public async resetPendingAuthAttempt(): Promise<void> {
+    this.pendingClient = null
+    await this.systemStateService.update({
+      authStatus: 'AUTH_PENDING',
+      phoneCodeHash: null
+    })
+  }
 
-    if (cachedClient) {
-      return cachedClient
+  public async joinChannel(channel: string): Promise<IChannelJoinResult> {
+    let client: IMtcuteRuntimeClient | null = null
+
+    try {
+      client = await this.getSystemClient()
+    } catch (error) {
+      return this.toJoinError(error)
     }
 
-    const session = await this.db.session.findUnique({ where: { userId } })
+    if (!client) {
+      return {
+        status: 'PENDING',
+        error: 'Central userbot is not authorized. Admin must send /login to the bot.'
+      }
+    }
 
-    if (!session?.sessionString) {
-      return null
+    const peerCandidates = getMtcutePeerCandidates(channel)
+    const primaryPeerInput = getPrimaryMtcutePeerInput(channel)
+
+    if (
+      shouldCheckExistingChatAccess(channel) &&
+      (await this.hasChatAccess(client, peerCandidates))
+    ) {
+      return {
+        status: 'JOINED'
+      }
+    }
+
+    try {
+      const result = await client.joinChat(primaryPeerInput)
+
+      if (result.status === 'request_sent') {
+        return {
+          status: 'REQUEST_SENT',
+          error: 'Join request was sent and is waiting for channel admin approval'
+        }
+      }
+
+      if (result.status === 'webview') {
+        return {
+          status: 'WEBVIEW_REQUIRED',
+          error: 'Telegram requested a webview guard before joining this channel'
+        }
+      }
+
+      return {
+        status: 'JOINED'
+      }
+    } catch (error) {
+      if (
+        hasRpcCode(error, 'CHANNEL_PRIVATE') &&
+        (await this.hasChatAccess(client, peerCandidates))
+      ) {
+        return {
+          status: 'JOINED'
+        }
+      }
+
+      return this.toJoinError(error)
+    }
+  }
+
+  private async preparePendingClient(): Promise<IMtcuteRuntimeClient> {
+    if (this.pendingClient) {
+      return this.pendingClient
     }
 
     const client = this.createClient()
-    await this.sessionStorage.importForUser(userId, client)
-    await client.getMe()
-    client.startUpdatesLoop()
-    this.clients.set(userId, client)
-    this.attachMessageListener(userId, client)
-
-    return client
-  }
-
-  public async getClientForTelegramId(telegramId: bigint): Promise<IMtcuteRuntimeClient | null> {
-    const userId = await this.configService.getUserIdByTelegramId(telegramId)
-
-    return this.getClientForUserId(userId)
-  }
-
-  private getPendingStep(userId: string): TAuthStep {
-    return this.pendingClients.has(userId) ? 'code' : 'phone'
-  }
-
-  private async preparePendingClient(userId: string): Promise<IMtcuteRuntimeClient> {
-    const existingClient = this.pendingClients.get(userId)
-
-    if (existingClient) {
-      return existingClient
-    }
-
-    const client = this.createClient()
-    await this.sessionStorage.importForUser(userId, client)
-    this.pendingClients.set(userId, client)
+    await this.sessionStorage.import(client)
+    this.pendingClient = client
 
     return client
   }
@@ -320,6 +385,64 @@ export class ClientManager {
     })
   }
 
+  private async promoteAuthorizedClient(client: IMtcuteRuntimeClient): Promise<void> {
+    await this.sessionStorage.persist(client)
+    await this.activateClient(client)
+    this.pendingClient = null
+  }
+
+  private async activateClient(client: IMtcuteRuntimeClient): Promise<void> {
+    await client.getMe()
+    client.startUpdatesLoop()
+    this.client = client
+    this.attachMessageListener(client)
+  }
+
+  private attachMessageListener(client: IMtcuteRuntimeClient): void {
+    if (this.dispatcher) {
+      return
+    }
+
+    const dispatcher = DispatcherFactory.for(client)
+    dispatcher.onNewMessage((message) => {
+      void this.scraperService.handleIncomingMessage(message).catch((error) => {
+        logger.error('Failed to process realtime Telegram message', {
+          error: error instanceof Error ? error.message : String(error)
+        })
+      })
+    })
+    this.dispatcher = dispatcher
+  }
+
+  private async hasChatAccess(
+    client: IMtcuteRuntimeClient,
+    peerCandidates: TTelegramPeerInput[]
+  ): Promise<boolean> {
+    for (const peerCandidate of peerCandidates) {
+      if (client.getChat) {
+        try {
+          await client.getChat(peerCandidate)
+
+          return true
+        } catch {
+          continue
+        }
+      }
+
+      if (client.openChat) {
+        try {
+          await client.openChat(peerCandidate)
+
+          return true
+        } catch {
+          continue
+        }
+      }
+    }
+
+    return false
+  }
+
   private toCodeDelivery(result: IMtcuteSentCodeResult): IAuthCodeDeliveryDto {
     return {
       type: result.type,
@@ -330,46 +453,43 @@ export class ClientManager {
     }
   }
 
-  private logCodeDelivery(
-    userId: string,
-    action: 'requested' | 'resent',
-    codeDelivery: IAuthCodeDeliveryDto
-  ): void {
-    logger.info(`Telegram auth code ${action}`, {
-      userId,
+  private logCodeDelivery(codeDelivery: IMtcuteSentCodeResult): void {
+    logger.info('Telegram auth code requested for central userbot', {
       deliveryType: codeDelivery.type,
       nextType: codeDelivery.nextType,
-      timeoutSeconds: codeDelivery.timeoutSeconds,
+      timeoutSeconds: codeDelivery.timeout,
       codeLength: codeDelivery.length
     })
   }
 
-  private async promoteAuthorizedClient(
-    userId: string,
-    client: IMtcuteRuntimeClient
-  ): Promise<void> {
-    await this.sessionStorage.persistForUser(userId, client)
-    client.startUpdatesLoop()
-    this.clients.set(userId, client)
-    this.pendingClients.delete(userId)
-    this.attachMessageListener(userId, client)
-  }
+  private toJoinError(error: unknown): IChannelJoinResult {
+    const floodWaitSeconds = getFloodWaitSeconds(error)
 
-  private attachMessageListener(userId: string, client: IMtcuteRuntimeClient): void {
-    if (this.dispatchers.has(userId)) {
-      return
+    if (floodWaitSeconds !== null) {
+      return {
+        status: 'FAILED',
+        error: `Telegram FLOOD_WAIT: retry after ${floodWaitSeconds} seconds`
+      }
     }
 
-    const dispatcher = DispatcherFactory.for(client)
-    dispatcher.onNewMessage((message) => {
-      void this.scraperService.handleIncomingMessage(userId, message).catch((error) => {
-        logger.error('Failed to process realtime Telegram message', {
-          userId,
-          error: error instanceof Error ? error.message : String(error)
-        })
-      })
-    })
-    this.dispatchers.set(userId, dispatcher)
+    if (hasRpcCode(error, 'INVITE_HASH_EXPIRED')) {
+      return {
+        status: 'FAILED',
+        error: 'Invite link expired'
+      }
+    }
+
+    if (hasRpcCode(error, 'CHANNEL_PRIVATE')) {
+      return {
+        status: 'FAILED',
+        error: 'Channel is private or unavailable to the central userbot'
+      }
+    }
+
+    return {
+      status: 'FAILED',
+      error: error instanceof Error ? error.message : String(error)
+    }
   }
 }
 

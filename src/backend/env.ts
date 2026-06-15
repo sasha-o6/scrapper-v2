@@ -1,10 +1,14 @@
 interface IEnvironment {
   databaseUrl: string
   botToken: string
+  adminPhone: string
+  adminTelegramId: bigint
   telegramApiId: number
   telegramApiHash: string
   port: number
+  publicAppUrl: string
   queueIntervalMs: number
+  botPollingIntervalMs: number
   allowDevAuth: boolean
   devTelegramId: bigint | null
   nodeEnv: string
@@ -63,10 +67,14 @@ const readOptionalBigInt = (key: string): bigint | null => {
 export const env: IEnvironment = {
   databaseUrl: readRequired('DATABASE_URL'),
   botToken: readRequired('BOT_TOKEN'),
+  adminPhone: readRequired('ADMIN_PHONE'),
+  adminTelegramId: BigInt(readRequired('ADMIN_TELEGRAM_ID')),
   telegramApiId: readNumber('TELEGRAM_API_ID'),
   telegramApiHash: readRequired('TELEGRAM_API_HASH'),
   port: readNumber('PORT', 3000),
-  queueIntervalMs: readNumber('QUEUE_INTERVAL_MS', 4000),
+  publicAppUrl: process.env.PUBLIC_APP_URL ?? `http://localhost:${readNumber('PORT', 3000)}`,
+  queueIntervalMs: readNumber('QUEUE_INTERVAL_MS', 2500),
+  botPollingIntervalMs: readNumber('BOT_POLLING_INTERVAL_MS', 2000),
   allowDevAuth: readBoolean('ALLOW_DEV_AUTH', false),
   devTelegramId: readOptionalBigInt('DEV_TELEGRAM_ID'),
   nodeEnv: process.env.NODE_ENV ?? 'development'

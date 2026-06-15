@@ -1,4 +1,4 @@
-import { History, Pause, Play, Save, ShieldCheck } from 'lucide-preact'
+import { AlertTriangle, History, Pause, Play, Save, ShieldCheck } from 'lucide-preact'
 import { memo } from 'preact/compat'
 
 import { ArrayEditor } from '@frontend/components/ArrayEditor'
@@ -51,6 +51,13 @@ export const Dashboard = memo(
           </div>
         </section>
 
+        {!config.isAuthorized ? (
+          <section className={styles.warningBand}>
+            <AlertTriangle size={18} />
+            <p>Центральний userbot не авторизований. Адмін має написати /login основному боту.</p>
+          </section>
+        ) : null}
+
         <section className={styles.section}>
           <div className={styles.sectionHeader}>
             <h3>Маршрутизація</h3>
@@ -70,6 +77,10 @@ export const Dashboard = memo(
         <section className={styles.gridSection}>
           <ChannelEditor
             items={dashboard.draft.channels}
+            title={dashboard.pendingChannel.title}
+            value={dashboard.pendingChannel.value}
+            onTitleChange={dashboard.setPendingChannelTitle}
+            onValueChange={dashboard.setPendingChannelValue}
             onAdd={dashboard.addChannel}
             onRemove={dashboard.removeChannel}
           />

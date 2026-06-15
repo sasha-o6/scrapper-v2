@@ -5,7 +5,7 @@ import type { IMtcuteRuntimeClient } from '@backend/services/ClientManager'
 import { logger } from '@backend/utils/logger'
 
 interface IClientProvider {
-  getClientForUserId(userId: string): Promise<IMtcuteRuntimeClient | null>
+  getSystemClient(): Promise<IMtcuteRuntimeClient | null>
 }
 
 export class MessageQueueWorker {
@@ -70,10 +70,10 @@ export class MessageQueueWorker {
   }
 
   private async sendItem(item: MessageQueue): Promise<void> {
-    const client = await this.clientProvider.getClientForUserId(item.userId)
+    const client = await this.clientProvider.getSystemClient()
 
     if (!client) {
-      await this.markFailed(item.id, 'Telegram client is not authorized')
+      await this.markFailed(item.id, 'Central Telegram userbot is not authorized')
 
       return
     }

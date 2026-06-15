@@ -1,8 +1,24 @@
 import type { Config, Prisma, PrismaClient } from '@prisma/client'
 
-import type { IChannelConfig, IConfigDto, IConfigUpdatePayload } from '@shared/types'
+import type { SystemStateService } from '@backend/services/SystemStateService'
+import type {
+  IChannelConfig,
+  IConfigDto,
+  IConfigUpdatePayload,
+  TChannelJoinStatus
+} from '@shared/types'
 
 const DEFAULT_HISTORY_DEPTH_DAYS = 1
+const DEFAULT_CHANNEL_JOIN_STATUS: TChannelJoinStatus = 'PENDING'
+
+export interface IChannelJoinResult {
+  status: TChannelJoinStatus
+  error?: string
+}
+
+export interface IChannelJoiner {
+  joinChannel(channel: string): Promise<IChannelJoinResult>
+}
 
 const normalizeList = (items?: string[]): string[] | undefined => {
   if (!items) {
@@ -19,7 +35,7 @@ const normalizeChannelItem = (item: unknown): IChannelConfig | null => {
   if (typeof item === 'string') {
     const value = item.trim()
 
-    return value ? { title: '', value } : null
+    return value ? { title: '', value, joinStatus: DEFAULT_CHANNEL_JOIN_STATUS } : null
   }
 
   if (!isRecord(item) || typeof item.value !== 'string') {
@@ -34,8 +50,25 @@ const normalizeChannelItem = (item: unknown): IChannelConfig | null => {
 
   return {
     title: typeof item.title === 'string' ? item.title.trim() : '',
-    value
+    value,
+    joinStatus: normalizeJoinStatus(item.joinStatus),
+    joinError: typeof item.joinError === 'string' ? item.joinError : undefined,
+    joinedAt: typeof item.joinedAt === 'string' ? item.joinedAt : undefined
   }
+}
+
+const normalizeJoinStatus = (value: unknown): TChannelJoinStatus => {
+  if (
+    value === 'PENDING' ||
+    value === 'JOINED' ||
+    value === 'REQUEST_SENT' ||
+    value === 'WEBVIEW_REQUIRED' ||
+    value === 'FAILED'
+  ) {
+    return value
+  }
+
+  return DEFAULT_CHANNEL_JOIN_STATUS
 }
 
 const normalizeChannels = (items?: IChannelConfig[]): IChannelConfig[] | undefined => {
@@ -74,10 +107,23 @@ const parseChannels = (
 }
 
 const toChannelItemsJson = (channels: IChannelConfig[]): Prisma.InputJsonValue =>
-  channels.map((channel) => ({
-    title: channel.title,
-    value: channel.value
-  }))
+  channels.map((channel) => {
+    const item: Prisma.JsonObject = {
+      title: channel.title,
+      value: channel.value,
+      joinStatus: channel.joinStatus ?? DEFAULT_CHANNEL_JOIN_STATUS
+    }
+
+    if (channel.joinError) {
+      item.joinError = channel.joinError
+    }
+
+    if (channel.joinedAt) {
+      item.joinedAt = channel.joinedAt
+    }
+
+    return item
+  })
 
 const normalizeTargetChat = (targetChat?: string): string | undefined => {
   if (targetChat === undefined) {
@@ -96,14 +142,23 @@ const normalizeHistoryDepth = (days?: number): number | undefined => {
 }
 
 export class ConfigService {
-  public constructor(private readonly db: PrismaClient) {}
+  private channelJoiner: IChannelJoiner | null = null
+
+  public constructor(
+    private readonly db: PrismaClient,
+    private readonly systemStateService: SystemStateService
+  ) {}
+
+  public setChannelJoiner(channelJoiner: IChannelJoiner): void {
+    this.channelJoiner = channelJoiner
+  }
 
   public async getConfigByTelegramId(telegramId: bigint): Promise<IConfigDto> {
     const user = await this.ensureUser(telegramId)
     const config = await this.ensureConfig(user.id)
-    const session = await this.db.session.findUnique({ where: { userId: user.id } })
+    const systemStatus = await this.systemStateService.getStatus()
 
-    return this.toDto(config, telegramId, Boolean(session?.sessionString))
+    return this.toDto(config, telegramId, systemStatus)
   }
 
   public async updateConfigByTelegramId(
@@ -111,29 +166,16 @@ export class ConfigService {
     payload: IConfigUpdatePayload
   ): Promise<IConfigDto> {
     const user = await this.ensureUser(telegramId)
-    const data = this.toUpdateData(payload)
+    const currentConfig = await this.ensureConfig(user.id)
+    const data = await this.toUpdateData(payload, currentConfig)
 
-    const config = await this.db.config.upsert({
+    const config = await this.db.config.update({
       where: { userId: user.id },
-      create: {
-        userId: user.id,
-        targetChat: data.targetChat as string | undefined,
-        isActive: (data.isActive as boolean | undefined) ?? false,
-        channels: (data.channels as string[] | undefined) ?? [],
-        channelItems: (data.channelItems as Prisma.InputJsonValue | undefined) ?? [],
-        keyWords: (data.keyWords as string[] | undefined) ?? [],
-        strictMode: (data.strictMode as boolean | undefined) ?? false,
-        additionalWords: (data.additionalWords as string[] | undefined) ?? [],
-        banWords: (data.banWords as string[] | undefined) ?? [],
-        historyDepthDays:
-          (data.historyDepthDays as number | undefined) ?? DEFAULT_HISTORY_DEPTH_DAYS
-      },
-      update: data
+      data
     })
+    const systemStatus = await this.systemStateService.getStatus()
 
-    const session = await this.db.session.findUnique({ where: { userId: user.id } })
-
-    return this.toDto(config, telegramId, Boolean(session?.sessionString))
+    return this.toDto(config, telegramId, systemStatus)
   }
 
   public async getUserIdByTelegramId(telegramId: bigint): Promise<string> {
@@ -165,7 +207,10 @@ export class ConfigService {
     })
   }
 
-  private toUpdateData(payload: IConfigUpdatePayload): Prisma.ConfigUpdateInput {
+  private async toUpdateData(
+    payload: IConfigUpdatePayload,
+    currentConfig: Config
+  ): Promise<Prisma.ConfigUpdateInput> {
     const data: Prisma.ConfigUpdateInput = {}
     const targetChat = normalizeTargetChat(payload.targetChat)
     const channels = normalizeChannels(payload.channels)
@@ -183,8 +228,9 @@ export class ConfigService {
     }
 
     if (channels !== undefined) {
-      data.channels = channels.map((channel) => channel.value)
-      data.channelItems = toChannelItemsJson(channels)
+      const channelsWithJoinResults = await this.attachJoinResults(channels, currentConfig)
+      data.channels = channelsWithJoinResults.map((channel) => channel.value)
+      data.channelItems = toChannelItemsJson(channelsWithJoinResults)
     }
 
     if (keyWords !== undefined) {
@@ -210,7 +256,55 @@ export class ConfigService {
     return data
   }
 
-  private toDto(config: Config, telegramId: bigint, isAuthorized: boolean): IConfigDto {
+  private async attachJoinResults(
+    channels: IChannelConfig[],
+    currentConfig: Config
+  ): Promise<IChannelConfig[]> {
+    const existingChannels = parseChannels(currentConfig.channelItems, currentConfig.channels)
+    const existingByValue = new Map(
+      existingChannels.map((channel) => [channel.value, channel] as const)
+    )
+    const now = new Date().toISOString()
+    const nextChannels: IChannelConfig[] = []
+
+    for (const channel of channels) {
+      const existingChannel = existingByValue.get(channel.value)
+
+      if (existingChannel) {
+        nextChannels.push({
+          ...existingChannel,
+          title: channel.title
+        })
+        continue
+      }
+
+      if (!this.channelJoiner) {
+        nextChannels.push({
+          ...channel,
+          joinStatus: 'FAILED',
+          joinError: 'Channel joiner is not available'
+        })
+        continue
+      }
+
+      const joinResult = await this.channelJoiner.joinChannel(channel.value)
+
+      nextChannels.push({
+        ...channel,
+        joinStatus: joinResult.status,
+        joinError: joinResult.error,
+        joinedAt: joinResult.status === 'JOINED' ? now : undefined
+      })
+    }
+
+    return nextChannels
+  }
+
+  private toDto(
+    config: Config,
+    telegramId: bigint,
+    systemStatus: IConfigDto['systemStatus']
+  ): IConfigDto {
     return {
       telegramId: telegramId.toString(),
       targetChat: config.targetChat ?? '',
@@ -221,7 +315,8 @@ export class ConfigService {
       additionalWords: config.additionalWords,
       banWords: config.banWords,
       historyDepthDays: config.historyDepthDays,
-      isAuthorized,
+      isAuthorized: systemStatus === 'LOGGED_IN',
+      systemStatus,
       updatedAt: config.updatedAt.toISOString()
     }
   }

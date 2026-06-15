@@ -3,6 +3,10 @@ import type { PrismaClient } from '@prisma/client'
 import type { ClientManager, IMtcuteRuntimeClient } from '@backend/services/ClientManager'
 import type { ScraperService } from '@backend/services/ScraperService'
 import {
+  getPrimaryMtcutePeerInput,
+  type TTelegramPeerInput
+} from '@backend/services/TelegramPeerRef'
+import {
   type INormalizedTelegramMessage,
   normalizeTelegramMessage
 } from '@backend/services/TelegramMessageNormalizer'
@@ -44,10 +48,10 @@ export class HistoricalFetcher {
       return 0
     }
 
-    const client = await this.clientManager.getClientForUserId(user.id)
+    const client = await this.clientManager.getSystemClient()
 
     if (!client) {
-      throw new Error('Telegram account is not authorized')
+      throw new Error('Central Telegram userbot is not authorized')
     }
 
     const cutoffSeconds = Math.floor(Date.now() / 1000) - Math.max(1, days) * 86_400
@@ -68,13 +72,14 @@ export class HistoricalFetcher {
   ): Promise<number> {
     let offsetDate = Math.floor(Date.now() / 1000)
     let queued = 0
+    const peerInput = getPrimaryMtcutePeerInput(channel)
 
     if (client.openChat) {
-      await client.openChat(channel)
+      await client.openChat(peerInput)
     }
 
     while (offsetDate > cutoffSeconds) {
-      const rawMessages = await this.loadHistoryBatch(client, channel, offsetDate)
+      const rawMessages = await this.loadHistoryBatch(client, peerInput, offsetDate)
       const messages = rawMessages
         .map(normalizeTelegramMessage)
         .filter((message): message is INormalizedTelegramMessage => Boolean(message))
@@ -85,7 +90,7 @@ export class HistoricalFetcher {
       }
 
       for (const message of messages) {
-        const wasQueued = await this.scraperService.processMessage(userId, message)
+        const wasQueued = await this.scraperService.processMessageForUser(userId, message)
 
         if (wasQueued) {
           queued += 1
@@ -109,7 +114,7 @@ export class HistoricalFetcher {
 
   private async loadHistoryBatch(
     client: IMtcuteRuntimeClient,
-    channel: string,
+    channel: TTelegramPeerInput,
     offsetDate: number
   ): Promise<unknown[]> {
     if (!client.getHistory) {

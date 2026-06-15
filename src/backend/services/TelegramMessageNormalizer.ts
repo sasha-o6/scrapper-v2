@@ -2,6 +2,7 @@ export interface INormalizedTelegramMessage {
   channelId: string
   messageId: string
   channelTitle: string | null
+  channelUsername: string | null
   channel: string
   dateUnixSeconds: number
   messageText: string
@@ -91,6 +92,7 @@ export const normalizeTelegramMessage = (
     channelId,
     messageId,
     channelTitle,
+    channelUsername: username,
     channel,
     dateUnixSeconds: getUnixDate(rawMessage.date),
     messageText,

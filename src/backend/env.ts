@@ -8,6 +8,7 @@ interface IEnvironment {
   port: number
   publicAppUrl: string
   queueIntervalMs: number
+  joinIntervalMs: number
   botPollingIntervalMs: number
   allowDevAuth: boolean
   devTelegramId: bigint | null
@@ -74,6 +75,7 @@ export const env: IEnvironment = {
   port: readNumber('PORT', 3000),
   publicAppUrl: process.env.PUBLIC_APP_URL ?? `http://localhost:${readNumber('PORT', 3000)}`,
   queueIntervalMs: readNumber('QUEUE_INTERVAL_MS', 2500),
+  joinIntervalMs: readNumber('JOIN_INTERVAL_MS', 4000),
   botPollingIntervalMs: readNumber('BOT_POLLING_INTERVAL_MS', 2000),
   allowDevAuth: readBoolean('ALLOW_DEV_AUTH', false),
   devTelegramId: readOptionalBigInt('DEV_TELEGRAM_ID'),

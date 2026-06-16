@@ -15,6 +15,11 @@ import {
 const DEFAULT_HISTORY_DEPTH_DAYS = 1
 const DEFAULT_CHANNEL_JOIN_STATUS: TChannelJoinStatus = 'PENDING'
 
+const sleep = (ms: number): Promise<void> =>
+  new Promise((resolve) => {
+    setTimeout(resolve, ms)
+  })
+
 export interface IChannelJoinResult {
   status: TChannelJoinStatus
   error?: string
@@ -152,7 +157,8 @@ export class ConfigService {
 
   public constructor(
     private readonly db: PrismaClient,
-    private readonly systemStateService: SystemStateService
+    private readonly systemStateService: SystemStateService,
+    private readonly channelJoinDelayMs: number = 0
   ) {}
 
   public setChannelJoiner(channelJoiner: IChannelJoiner): void {
@@ -272,6 +278,7 @@ export class ConfigService {
     )
     const now = new Date().toISOString()
     const nextChannels: IChannelConfig[] = []
+    let joinAttempts = 0
 
     for (const channel of channels) {
       const existingChannel = existingByValue.get(channel.value)
@@ -293,6 +300,11 @@ export class ConfigService {
         continue
       }
 
+      if (joinAttempts > 0 && this.channelJoinDelayMs > 0) {
+        await sleep(this.channelJoinDelayMs)
+      }
+
+      joinAttempts += 1
       const joinResult = await this.channelJoiner.joinChannel(channel.value)
 
       nextChannels.push({

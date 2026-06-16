@@ -11,7 +11,7 @@ import { ScraperService } from '@backend/services/ScraperService'
 import { SystemStateService } from '@backend/services/SystemStateService'
 
 const systemStateService = new SystemStateService(prisma)
-const configService = new ConfigService(prisma, systemStateService)
+const configService = new ConfigService(prisma, systemStateService, env.joinIntervalMs)
 const scraperService = new ScraperService(prisma)
 const clientManager = new ClientManager(scraperService, systemStateService)
 configService.setChannelJoiner(clientManager)

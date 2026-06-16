@@ -24,9 +24,17 @@ const asString = (value: unknown): string | null => {
   return null
 }
 
+const getRecordValue = (record: Record<string, unknown>, key: string): unknown => {
+  try {
+    return record[key]
+  } catch {
+    return undefined
+  }
+}
+
 const getFirstString = (record: Record<string, unknown>, keys: string[]): string | null => {
   for (const key of keys) {
-    const value = asString(record[key])
+    const value = asString(getRecordValue(record, key))
 
     if (value) {
       return value
@@ -77,7 +85,8 @@ export const normalizeTelegramMessage = (
     return null
   }
 
-  const chat = isRecord(rawMessage.chat) ? rawMessage.chat : {}
+  const rawChat = getRecordValue(rawMessage, 'chat')
+  const chat = isRecord(rawChat) ? rawChat : {}
   const messageId = getFirstString(rawMessage, ['id', 'messageId']) ?? crypto.randomUUID()
   const channelId =
     getFirstString(chat, ['id', 'chatId']) ??
@@ -94,7 +103,7 @@ export const normalizeTelegramMessage = (
     channelTitle,
     channelUsername: username,
     channel,
-    dateUnixSeconds: getUnixDate(rawMessage.date),
+    dateUnixSeconds: getUnixDate(getRecordValue(rawMessage, 'date')),
     messageText,
     postLink
   }

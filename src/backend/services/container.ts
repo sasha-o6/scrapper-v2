@@ -16,8 +16,8 @@ const scraperService = new ScraperService(prisma)
 const clientManager = new ClientManager(scraperService, systemStateService)
 configService.setChannelJoiner(clientManager)
 const historicalFetcher = new HistoricalFetcher(prisma, clientManager, scraperService)
-const queueWorker = new MessageQueueWorker(prisma, clientManager, env.queueIntervalMs)
 const botApiClient = new BotApiClient(env.botToken)
+const queueWorker = new MessageQueueWorker(prisma, clientManager, env.queueIntervalMs, botApiClient)
 const adminLoginWebService = new AdminLoginWebService(clientManager, env.publicAppUrl)
 const adminBotService = new AdminBotService(
   botApiClient,

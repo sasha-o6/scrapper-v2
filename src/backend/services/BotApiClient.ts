@@ -20,11 +20,20 @@ export interface IBotApiUpdate {
   message?: IBotApiMessage
 }
 
+export interface IBotApiUser {
+  id: number
+  is_bot: boolean
+  first_name: string
+  username?: string
+}
+
 export class BotApiClient {
   private readonly baseUrl: string
+  public readonly tokenBotId: string | null
 
   public constructor(botToken: string) {
     this.baseUrl = `https://api.telegram.org/bot${botToken}`
+    this.tokenBotId = botToken.split(':')[0] || null
   }
 
   public async getUpdates(offset: number): Promise<IBotApiUpdate[]> {
@@ -33,6 +42,10 @@ export class BotApiClient {
       timeout: 0,
       allowed_updates: ['message']
     })
+  }
+
+  public async getMe(): Promise<IBotApiUser> {
+    return this.request<IBotApiUser>('getMe', {})
   }
 
   public async sendMessage(chatId: string, text: string): Promise<void> {

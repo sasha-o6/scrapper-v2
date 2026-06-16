@@ -119,6 +119,10 @@
   @apply h-8 w-8 border-transparent bg-transparent text-coral;
 }
 
+.neutralIconButton {
+  @apply text-pine;
+}
+
 .toggle {
   @apply inline-flex h-11 min-w-32 items-center gap-3 rounded-md border border-line bg-white px-3 text-sm font-semibold text-ink transition-[background-color,border-color,transform] duration-150 will-change-transform;
 }
@@ -137,6 +141,34 @@
 
 .list {
   @apply flex min-h-10 flex-wrap gap-2;
+}
+
+.listToolbar {
+  @apply mb-3 mt-3 grid grid-cols-[2rem_minmax(0,1fr)_2rem_2rem] items-center gap-2;
+}
+
+.channelListToolbar {
+  @apply grid-cols-[2rem_minmax(0,1fr)_2rem];
+}
+
+.searchField {
+  @apply flex h-9 min-w-0 items-center gap-2 rounded-md border border-line bg-white px-2 text-ink transition-[box-shadow,border-color] duration-150;
+
+  svg {
+    @apply shrink-0 text-pine;
+  }
+
+  &:focus-within {
+    @apply border-pine shadow-focus;
+  }
+
+  input {
+    @apply h-full min-w-0 flex-1 bg-transparent text-sm outline-none;
+  }
+}
+
+.chevronOpen {
+  transform: rotate(180deg);
 }
 
 .listItem {

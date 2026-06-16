@@ -38,8 +38,10 @@ interface IUseDashboardConfigResult {
   setPendingChannelValue(value: string): void
   addChannel(channel: IChannelConfig): void
   removeChannel(value: string): void
+  clearChannels(): void
   addListItem(key: TListKey, value: string): void
   removeListItem(key: TListKey, value: string): void
+  clearList(key: TListKey): void
   save(): Promise<void>
   collectHistory(): Promise<void>
 }
@@ -135,10 +137,25 @@ export const useDashboardConfig = ({
     }))
   }, [])
 
+  const clearChannels = useCallback(() => {
+    setDraft((current) => ({
+      ...current,
+      channels: []
+    }))
+    setPendingChannel({ title: '', value: '' })
+  }, [])
+
   const removeListItem = useCallback((key: TListKey, value: string) => {
     setDraft((current) => ({
       ...current,
       [key]: current[key].filter((item) => item !== value)
+    }))
+  }, [])
+
+  const clearList = useCallback((key: TListKey) => {
+    setDraft((current) => ({
+      ...current,
+      [key]: []
     }))
   }, [])
 
@@ -179,8 +196,10 @@ export const useDashboardConfig = ({
     setPendingChannelValue,
     addChannel,
     removeChannel,
+    clearChannels,
     addListItem,
     removeListItem,
+    clearList,
     save,
     collectHistory
   }

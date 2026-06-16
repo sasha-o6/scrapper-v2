@@ -83,6 +83,7 @@ export const Dashboard = memo(
             onValueChange={dashboard.setPendingChannelValue}
             onAdd={dashboard.addChannel}
             onRemove={dashboard.removeChannel}
+            onClear={dashboard.clearChannels}
           />
           <ArrayEditor
             label="Ключові слова"
@@ -90,6 +91,7 @@ export const Dashboard = memo(
             items={dashboard.draft.keyWords}
             onAdd={(value) => dashboard.addListItem('keyWords', value)}
             onRemove={(value) => dashboard.removeListItem('keyWords', value)}
+            onClear={() => dashboard.clearList('keyWords')}
           />
         </section>
 
@@ -113,6 +115,7 @@ export const Dashboard = memo(
               items={dashboard.draft.additionalWords}
               onAdd={(value) => dashboard.addListItem('additionalWords', value)}
               onRemove={(value) => dashboard.removeListItem('additionalWords', value)}
+              onClear={() => dashboard.clearList('additionalWords')}
             />
           ) : null}
           <ArrayEditor
@@ -121,6 +124,7 @@ export const Dashboard = memo(
             items={dashboard.draft.banWords}
             onAdd={(value) => dashboard.addListItem('banWords', value)}
             onRemove={(value) => dashboard.removeListItem('banWords', value)}
+            onClear={() => dashboard.clearList('banWords')}
           />
         </section>
 

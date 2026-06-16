@@ -1,8 +1,18 @@
-import { AlertTriangle, CheckCircle2, Clock3, Plus, ShieldAlert, Trash2 } from 'lucide-preact'
+import {
+  AlertTriangle,
+  CheckCircle2,
+  ChevronDown,
+  Clock3,
+  Plus,
+  Search,
+  ShieldAlert,
+  Trash2
+} from 'lucide-preact'
 import { memo } from 'preact/compat'
-import { useCallback } from 'preact/hooks'
+import { useCallback, useMemo, useState } from 'preact/hooks'
 
 import styles from '@frontend/styles/App.module.scss'
+import { cn } from '@frontend/utils/cn'
 import { splitCommaSeparatedValuePairs } from '@shared/listInput'
 import type { IChannelConfig, TChannelJoinStatus } from '@shared/types'
 
@@ -14,6 +24,7 @@ interface IChannelEditorProps {
   onValueChange(value: string): void
   onAdd(channel: IChannelConfig): void
   onRemove(value: string): void
+  onClear(): void
 }
 
 const formatChannelLabel = (channel: IChannelConfig): string =>
@@ -50,8 +61,11 @@ export const ChannelEditor = memo(({
   onTitleChange,
   onValueChange,
   onAdd,
-  onRemove
+  onRemove,
+  onClear
 }: IChannelEditorProps) => {
+  const [isExpanded, setIsExpanded] = useState(true)
+  const [search, setSearch] = useState('')
   const submit = useCallback(() => {
     const channels = splitCommaSeparatedValuePairs(value, title)
 
@@ -66,6 +80,20 @@ export const ChannelEditor = memo(({
       })
     }
   }, [onAdd, title, value])
+  const filteredItems = useMemo(() => {
+    const normalizedSearch = search.trim().toLocaleLowerCase('uk-UA')
+
+    if (!normalizedSearch) {
+      return items
+    }
+
+    return items.filter((item) =>
+      [item.title, item.value, item.joinError ?? '']
+        .join(' ')
+        .toLocaleLowerCase('uk-UA')
+        .includes(normalizedSearch)
+    )
+  }, [items, search])
 
   return (
     <section className={styles.listEditor} aria-label="Канали">
@@ -100,34 +128,65 @@ export const ChannelEditor = memo(({
           <Plus size={18} />
         </button>
       </div>
-      <div className={styles.list}>
-        {items.map((item) => {
-          const joinStatus = item.joinStatus ?? 'PENDING'
-
-          return (
-            <div className={styles.channelItem} key={item.value}>
-              <div className={styles.channelMeta}>
-                <span>{formatChannelLabel(item)}</span>
-                <span className={styles.channelStatus} data-status={joinStatus}>
-                  {getStatusIcon(joinStatus)}
-                  {JOIN_STATUS_LABELS[joinStatus]}
-                </span>
-                {item.joinError ? (
-                  <small className={styles.channelError}>{item.joinError}</small>
-                ) : null}
-              </div>
-              <button
-                className={styles.ghostIconButton}
-                type="button"
-                title="Видалити"
-                onClick={() => onRemove(item.value)}
-              >
-                <Trash2 size={16} />
-              </button>
-            </div>
-          )
-        })}
+      <div className={cn(styles.listToolbar, styles.channelListToolbar)}>
+        <button
+          className={cn(styles.ghostIconButton, styles.neutralIconButton)}
+          type="button"
+          title={isExpanded ? 'Згорнути' : 'Розгорнути'}
+          aria-expanded={isExpanded}
+          onClick={() => setIsExpanded((current) => !current)}
+        >
+          <ChevronDown className={isExpanded ? styles.chevronOpen : ''} size={16} />
+        </button>
+        <label className={styles.searchField}>
+          <Search size={16} />
+          <input
+            value={search}
+            placeholder="Пошук"
+            disabled={items.length === 0}
+            onInput={(event) => setSearch(event.currentTarget.value)}
+          />
+        </label>
+        <button
+          className={styles.ghostIconButton}
+          type="button"
+          title="Видалити все"
+          disabled={items.length === 0}
+          onClick={onClear}
+        >
+          <Trash2 size={16} />
+        </button>
       </div>
+      {isExpanded ? (
+        <div className={styles.list}>
+          {filteredItems.map((item) => {
+            const joinStatus = item.joinStatus ?? 'PENDING'
+
+            return (
+              <div className={styles.channelItem} key={item.value}>
+                <div className={styles.channelMeta}>
+                  <span>{formatChannelLabel(item)}</span>
+                  <span className={styles.channelStatus} data-status={joinStatus}>
+                    {getStatusIcon(joinStatus)}
+                    {JOIN_STATUS_LABELS[joinStatus]}
+                  </span>
+                  {item.joinError ? (
+                    <small className={styles.channelError}>{item.joinError}</small>
+                  ) : null}
+                </div>
+                <button
+                  className={styles.ghostIconButton}
+                  type="button"
+                  title="Видалити"
+                  onClick={() => onRemove(item.value)}
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
+            )
+          })}
+        </div>
+      ) : null}
     </section>
   )
 })

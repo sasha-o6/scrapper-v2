@@ -17,7 +17,7 @@ export const formatClickablePostLink = (value: string): string => {
   const postLink = value.trim();
 
   if (!postLink) {
-    return "Посилання недоступне";
+    return "-";
   }
 
   if (/^https?:\/\//i.test(postLink)) {
@@ -96,14 +96,17 @@ export const formatForwardedMessage = (
 ): string => {
   const rawChannel = message.channelTitle ?? message.channel;
   const channelLink =
-    getChannelLinkFromPostLink(message.postLink) || formatChannelLink(message.channel);
+    getChannelLinkFromPostLink(message.postLink) ||
+    formatChannelLink(message.channel);
   const channel = formatChannelTitle(rawChannel, channelLink);
   const date = escapeMarkdown(
     new Date(message.dateUnixSeconds * 1000).toLocaleString("uk-UA"),
   );
   const escapedMessageText = escapeMarkdown(message.messageText);
   const keyWords = escapeMarkdown(message.keyWords[0].join(", "));
-  const additionalWords = escapeMarkdown(message.keyWords[1]?.join(", ") ?? "");
+  const additionalWords = escapeMarkdown(
+    "   ___   " + (message.keyWords[1]?.join(", ") ?? ""),
+  );
   const postLink = formatClickablePostLink(message.postLink);
 
   return (
@@ -114,7 +117,6 @@ export const formatForwardedMessage = (
     `\n\n\n` +
     `🔑 Ключові слова: \n` +
     keyWords +
-    "   ___   " +
     additionalWords +
     `\n` +
     `🔗 Посилання: \n` +

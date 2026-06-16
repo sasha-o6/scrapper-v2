@@ -3,6 +3,7 @@ import { memo } from 'preact/compat'
 import { useCallback } from 'preact/hooks'
 
 import styles from '@frontend/styles/App.module.scss'
+import { splitCommaSeparatedValuePairs } from '@shared/listInput'
 import type { IChannelConfig, TChannelJoinStatus } from '@shared/types'
 
 interface IChannelEditorProps {
@@ -52,16 +53,18 @@ export const ChannelEditor = memo(({
   onRemove
 }: IChannelEditorProps) => {
   const submit = useCallback(() => {
-    const nextValue = value.trim()
+    const channels = splitCommaSeparatedValuePairs(value, title)
 
-    if (!nextValue) {
+    if (channels.length === 0) {
       return
     }
 
-    onAdd({
-      title,
-      value: nextValue
-    })
+    for (const channel of channels) {
+      onAdd({
+        title: channel.title,
+        value: channel.value
+      })
+    }
   }, [onAdd, title, value])
 
   return (

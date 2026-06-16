@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'preact/hooks'
 
+import {
+  splitCommaSeparatedValuePairs,
+  splitCommaSeparatedValues
+} from '@shared/listInput'
 import type {
   IChannelConfig,
   IConfigDto,
@@ -73,27 +77,30 @@ export const useDashboardConfig = ({
   }, [])
 
   const addListItem = useCallback((key: TListKey, value: string) => {
+    const values = splitCommaSeparatedValues(value)
+
     setDraft((current) => ({
       ...current,
-      [key]: Array.from(new Set([...current[key], value.trim()].filter(Boolean)))
+      [key]: Array.from(new Set([...current[key], ...values]))
     }))
   }, [])
 
   const mergeChannel = useCallback((items: IChannelConfig[], channel: IChannelConfig) => {
-    const value = channel.value.trim()
+    const channelsToMerge = splitCommaSeparatedValuePairs(channel.value, channel.title)
 
-    if (!value) {
+    if (channelsToMerge.length === 0) {
       return items
     }
 
-    const channels = items.filter((item) => item.value !== value)
+    const nextValues = new Set(channelsToMerge.map((item) => item.value))
+    const channels = items.filter((item) => !nextValues.has(item.value))
 
     return [
       ...channels,
-      {
-        title: channel.title.trim(),
-        value
-      }
+      ...channelsToMerge.map((item) => ({
+        title: item.title,
+        value: item.value
+      }))
     ]
   }, [])
 

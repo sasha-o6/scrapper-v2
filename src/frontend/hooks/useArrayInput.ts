@@ -1,5 +1,7 @@
 import { useCallback, useState } from 'preact/hooks'
 
+import { splitCommaSeparatedValues } from '@shared/listInput'
+
 interface IUseArrayInputResult {
   value: string
   setValue(value: string): void
@@ -10,13 +12,16 @@ export const useArrayInput = (onAdd: (value: string) => void): IUseArrayInputRes
   const [value, setValue] = useState('')
 
   const submit = useCallback(() => {
-    const trimmed = value.trim()
+    const values = splitCommaSeparatedValues(value)
 
-    if (!trimmed) {
+    if (values.length === 0) {
       return
     }
 
-    onAdd(trimmed)
+    for (const item of values) {
+      onAdd(item)
+    }
+
     setValue('')
   }, [onAdd, value])
 

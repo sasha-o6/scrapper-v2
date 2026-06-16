@@ -7,6 +7,10 @@ import type {
   IConfigUpdatePayload,
   TChannelJoinStatus
 } from '@shared/types'
+import {
+  splitCommaSeparatedValuePairs,
+  splitCommaSeparatedValues
+} from '@shared/listInput'
 
 const DEFAULT_HISTORY_DEPTH_DAYS = 1
 const DEFAULT_CHANNEL_JOIN_STATUS: TChannelJoinStatus = 'PENDING'
@@ -25,36 +29,39 @@ const normalizeList = (items?: string[]): string[] | undefined => {
     return undefined
   }
 
-  return Array.from(new Set(items.map((item) => item.trim()).filter(Boolean)))
+  return Array.from(new Set(items.flatMap(splitCommaSeparatedValues)))
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null
 
-const normalizeChannelItem = (item: unknown): IChannelConfig | null => {
+const normalizeChannelItems = (item: unknown): IChannelConfig[] => {
   if (typeof item === 'string') {
-    const value = item.trim()
-
-    return value ? { title: '', value, joinStatus: DEFAULT_CHANNEL_JOIN_STATUS } : null
+    return splitCommaSeparatedValues(item).map((value) => ({
+      title: '',
+      value,
+      joinStatus: DEFAULT_CHANNEL_JOIN_STATUS
+    }))
   }
 
   if (!isRecord(item) || typeof item.value !== 'string') {
-    return null
+    return []
   }
 
-  const value = item.value.trim()
+  const title = typeof item.title === 'string' ? item.title : ''
+  const channels = splitCommaSeparatedValuePairs(item.value, title)
 
-  if (!value) {
-    return null
+  if (channels.length === 0) {
+    return []
   }
 
-  return {
-    title: typeof item.title === 'string' ? item.title.trim() : '',
-    value,
+  return channels.map((channel) => ({
+    title: channel.title,
+    value: channel.value,
     joinStatus: normalizeJoinStatus(item.joinStatus),
     joinError: typeof item.joinError === 'string' ? item.joinError : undefined,
     joinedAt: typeof item.joinedAt === 'string' ? item.joinedAt : undefined
-  }
+  }))
 }
 
 const normalizeJoinStatus = (value: unknown): TChannelJoinStatus => {
@@ -79,9 +86,7 @@ const normalizeChannels = (items?: IChannelConfig[]): IChannelConfig[] | undefin
   const channelMap = new Map<string, IChannelConfig>()
 
   for (const item of items) {
-    const channel = normalizeChannelItem(item)
-
-    if (channel) {
+    for (const channel of normalizeChannelItems(item)) {
       channelMap.set(channel.value, channel)
     }
   }
@@ -95,15 +100,16 @@ const parseChannels = (
 ): IChannelConfig[] => {
   if (Array.isArray(channelItems)) {
     const parsedChannels = channelItems
-      .map(normalizeChannelItem)
-      .filter((channel): channel is IChannelConfig => Boolean(channel))
+      .flatMap(normalizeChannelItems)
 
     if (parsedChannels.length > 0) {
       return parsedChannels
     }
   }
 
-  return legacyChannels.map((value) => ({ title: '', value }))
+  return legacyChannels.flatMap((value) =>
+    splitCommaSeparatedValues(value).map((channel) => ({ title: '', value: channel }))
+  )
 }
 
 const toChannelItemsJson = (channels: IChannelConfig[]): Prisma.InputJsonValue =>

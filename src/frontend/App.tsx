@@ -52,6 +52,7 @@ export const App = () => {
             config={configState.config}
             isSaving={configState.isSaving}
             userName={initData.userName}
+            apiClient={apiClient}
             onSave={configState.saveConfig}
             onCollectHistory={configState.collectHistory}
           />

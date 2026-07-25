@@ -55,6 +55,14 @@ export interface IHistoryResultDto {
   queued: number
 }
 
+export interface IBannedSenderDto {
+  id: string
+  telegramId: string
+  username: string | null
+  name: string | null
+  bannedAt: string
+}
+
 export interface IApiErrorDto {
   error: string
 }

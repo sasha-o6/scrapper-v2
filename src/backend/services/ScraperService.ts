@@ -4,11 +4,20 @@ import type { PrismaClient } from '@prisma/client'
 import { isMessageFromConfiguredChannel } from '@backend/services/ChannelMatcher'
 import { filterMessage } from '@backend/services/MessageFilter'
 import {
+  type INormalizedMessageSender,
   type INormalizedTelegramMessage,
   normalizeTelegramMessage
 } from '@backend/services/TelegramMessageNormalizer'
 import { formatForwardedMessage } from '@backend/services/Formatter'
 import { logger } from '@backend/utils/logger'
+
+const toBigIntOrNull = (value: string): bigint | null => {
+  try {
+    return BigInt(value)
+  } catch {
+    return null
+  }
+}
 
 export class ScraperService {
   public constructor(private readonly db: PrismaClient) {}
@@ -87,6 +96,17 @@ export class ScraperService {
       return false
     }
 
+    if (await this.isSenderBanned(config.userId, message.sender)) {
+      logger.info('Skipped Telegram message from banned sender', {
+        userId: config.userId,
+        channelId: message.channelId,
+        messageId: message.messageId,
+        senderId: message.sender?.id
+      })
+
+      return false
+    }
+
     const deduplicated = await this.markProcessed(
       config.userId,
       message.channelId,
@@ -106,11 +126,16 @@ export class ScraperService {
       postLink: message.postLink
     })
 
+    const senderTelegramId = message.sender ? toBigIntOrNull(message.sender.id) : null
+
     await this.db.messageQueue.create({
       data: {
         userId: config.userId,
         messageText,
-        targetChat: config.targetChat
+        targetChat: config.targetChat,
+        senderTelegramId,
+        senderUsername: message.sender?.username ?? null,
+        senderName: message.sender?.displayName ?? null
       }
     })
 
@@ -121,6 +146,32 @@ export class ScraperService {
     })
 
     return true
+  }
+
+  private async isSenderBanned(
+    userId: string,
+    sender: INormalizedMessageSender | null
+  ): Promise<boolean> {
+    if (!sender) {
+      return false
+    }
+
+    const senderTelegramId = toBigIntOrNull(sender.id)
+
+    if (senderTelegramId === null) {
+      return false
+    }
+
+    const bannedSender = await this.db.bannedSender.findUnique({
+      where: {
+        userId_senderTelegramId: {
+          userId,
+          senderTelegramId
+        }
+      }
+    })
+
+    return bannedSender !== null
   }
 
   private async markProcessed(

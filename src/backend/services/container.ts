@@ -8,6 +8,7 @@ import { ConfigService } from '@backend/services/ConfigService'
 import { HistoricalFetcher } from '@backend/services/HistoricalFetcher'
 import { MessageQueueWorker } from '@backend/services/MessageQueueWorker'
 import { ScraperService } from '@backend/services/ScraperService'
+import { SenderBanService } from '@backend/services/SenderBanService'
 import { SystemStateService } from '@backend/services/SystemStateService'
 
 const systemStateService = new SystemStateService(prisma)
@@ -19,12 +20,14 @@ configService.setChannelJoiner(clientManager)
 const historicalFetcher = new HistoricalFetcher(prisma, clientManager, scraperService)
 const queueWorker = new MessageQueueWorker(prisma, clientManager, env.queueIntervalMs, botApiClient)
 const adminLoginWebService = new AdminLoginWebService(clientManager, env.publicAppUrl)
+const senderBanService = new SenderBanService(prisma)
 const adminBotService = new AdminBotService(
   botApiClient,
   clientManager,
   adminLoginWebService,
   env.adminTelegramId,
-  env.botPollingIntervalMs
+  env.botPollingIntervalMs,
+  senderBanService
 )
 
 export const services = {
@@ -36,5 +39,6 @@ export const services = {
   queueWorker,
   botApiClient,
   adminLoginWebService,
+  senderBanService,
   adminBotService
 }

@@ -4,7 +4,7 @@ interface IBotApiResponse<TResult> {
   description?: string
 }
 
-interface IBotApiMessage {
+export interface IBotApiMessage {
   message_id: number
   chat: {
     id: number
@@ -15,9 +15,28 @@ interface IBotApiMessage {
   text?: string
 }
 
+export interface IBotApiCallbackQuery {
+  id: string
+  from: {
+    id: number
+  }
+  message?: IBotApiMessage
+  data?: string
+}
+
 export interface IBotApiUpdate {
   update_id: number
   message?: IBotApiMessage
+  callback_query?: IBotApiCallbackQuery
+}
+
+export interface IBotApiInlineKeyboardButton {
+  text: string
+  callback_data: string
+}
+
+export interface IBotApiReplyMarkup {
+  inline_keyboard: IBotApiInlineKeyboardButton[][]
 }
 
 export interface IBotApiUser {
@@ -56,7 +75,7 @@ export class BotApiClient {
     return this.request<IBotApiUpdate[]>('getUpdates', {
       offset,
       timeout: 0,
-      allowed_updates: ['message']
+      allowed_updates: ['message', 'callback_query']
     })
   }
 
@@ -64,11 +83,35 @@ export class BotApiClient {
     return this.request<IBotApiUser>('getMe', {})
   }
 
-  public async sendMessage(chatId: string, text: string): Promise<void> {
-    await this.request('sendMessage', {
+  public async sendMessage(
+    chatId: string,
+    text: string,
+    replyMarkup?: IBotApiReplyMarkup
+  ): Promise<IBotApiMessage> {
+    return this.request<IBotApiMessage>('sendMessage', {
       chat_id: chatId,
       text,
-      disable_web_page_preview: true
+      disable_web_page_preview: true,
+      ...(replyMarkup ? { reply_markup: replyMarkup } : {})
+    })
+  }
+
+  public async answerCallbackQuery(callbackQueryId: string, text?: string): Promise<void> {
+    await this.request('answerCallbackQuery', {
+      callback_query_id: callbackQueryId,
+      ...(text ? { text } : {})
+    })
+  }
+
+  public async editMessageReplyMarkup(
+    chatId: number | string,
+    messageId: number,
+    replyMarkup: IBotApiReplyMarkup | null
+  ): Promise<void> {
+    await this.request('editMessageReplyMarkup', {
+      chat_id: chatId,
+      message_id: messageId,
+      reply_markup: replyMarkup ?? { inline_keyboard: [] }
     })
   }
 

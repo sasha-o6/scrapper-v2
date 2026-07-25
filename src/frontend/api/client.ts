@@ -2,10 +2,11 @@ export interface IApiClient {
   get<TResponse>(path: string): Promise<TResponse>
   post<TResponse, TPayload extends object>(path: string, payload: TPayload): Promise<TResponse>
   put<TResponse, TPayload extends object>(path: string, payload: TPayload): Promise<TResponse>
+  del<TResponse>(path: string): Promise<TResponse>
 }
 
 interface IRequestOptions<TPayload extends object> {
-  method: 'GET' | 'POST' | 'PUT'
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE'
   payload?: TPayload
 }
 
@@ -52,6 +53,7 @@ export const createApiClient = (initData: string): IApiClient => {
   return {
     get: (path) => request(path, { method: 'GET' }),
     post: (path, payload) => request(path, { method: 'POST', payload }),
-    put: (path, payload) => request(path, { method: 'PUT', payload })
+    put: (path, payload) => request(path, { method: 'PUT', payload }),
+    del: (path) => request(path, { method: 'DELETE' })
   }
 }

@@ -2,7 +2,17 @@ import { md } from '@mtcute/markdown-parser'
 import type { MessageQueue, PrismaClient, User } from '@prisma/client'
 
 import type { IMtcuteRuntimeClient } from '@backend/services/ClientManager'
-import type { IBotApiUser } from '@backend/services/BotApiClient'
+import type {
+  IBotApiMessage,
+  IBotApiReplyMarkup,
+  IBotApiUser
+} from '@backend/services/BotApiClient'
+import {
+  appendBanPromptBlock,
+  buildBanDeepLink,
+  formatBanPromptBlock
+} from '@backend/services/Formatter'
+import { buildBanKeyboard } from '@backend/services/SenderBanService'
 import { logger } from '@backend/utils/logger'
 
 interface IClientProvider {
@@ -12,7 +22,11 @@ interface IClientProvider {
 interface IBotMessageSender {
   readonly tokenBotId?: string | null
   getMe(): Promise<IBotApiUser>
-  sendMessage(chatId: string, text: string): Promise<void>
+  sendMessage(
+    chatId: string,
+    text: string,
+    replyMarkup?: IBotApiReplyMarkup
+  ): Promise<IBotApiMessage | void>
 }
 
 type TQueuedMessageItem = MessageQueue & {
@@ -20,6 +34,20 @@ type TQueuedMessageItem = MessageQueue & {
 }
 
 const TELEGRAM_HOSTS = new Set(['t.me', 'telegram.me', 'www.t.me', 'www.telegram.me'])
+
+const extractSentMessageId = (sentMessage: unknown): bigint | null => {
+  if (typeof sentMessage !== 'object' || sentMessage === null) {
+    return null
+  }
+
+  const id = (sentMessage as { id?: unknown }).id
+
+  if (typeof id === 'number' && Number.isFinite(id)) {
+    return BigInt(Math.trunc(id))
+  }
+
+  return null
+}
 
 const normalizeTargetRef = (value: string): string => {
   const trimmedValue = value.trim()
@@ -42,6 +70,7 @@ export class MessageQueueWorker {
 
   private isTicking = false
   private botSelfRefs: Set<string> | null = null
+  private botUsername: string | null | undefined = undefined
 
   public constructor(
     private readonly db: PrismaClient,
@@ -123,8 +152,9 @@ export class MessageQueueWorker {
     }
 
     try {
-      await client.sendText(item.targetChat, md(item.messageText))
-      await this.markSent(item.id)
+      const messageText = await this.buildUserbotMessageText(item)
+      const sentMessage = await client.sendText(item.targetChat, md(messageText))
+      await this.markSent(item.id, extractSentMessageId(sentMessage))
     } catch (error) {
       await this.markFailed(item.id, error instanceof Error ? error.message : String(error))
     }
@@ -138,11 +168,56 @@ export class MessageQueueWorker {
     }
 
     try {
-      await this.botMessageSender.sendMessage(item.user.telegramId.toString(), item.messageText)
-      await this.markSent(item.id)
+      const replyMarkup =
+        item.senderTelegramId !== null ? buildBanKeyboard(item.id) : undefined
+      const sentMessage = await this.botMessageSender.sendMessage(
+        item.user.telegramId.toString(),
+        item.messageText,
+        replyMarkup
+      )
+      await this.markSent(
+        item.id,
+        sentMessage ? BigInt(sentMessage.message_id) : null
+      )
     } catch (error) {
       await this.markFailed(item.id, error instanceof Error ? error.message : String(error))
     }
+  }
+
+  private async buildUserbotMessageText(item: TQueuedMessageItem): Promise<string> {
+    if (item.senderTelegramId === null) {
+      return item.messageText
+    }
+
+    const botUsername = await this.getBotUsername()
+
+    if (!botUsername) {
+      return item.messageText
+    }
+
+    return appendBanPromptBlock(
+      item.messageText,
+      formatBanPromptBlock('ban', buildBanDeepLink(botUsername, item.id))
+    )
+  }
+
+  private async getBotUsername(): Promise<string | null> {
+    if (!this.botMessageSender) {
+      return null
+    }
+
+    if (this.botUsername !== undefined) {
+      return this.botUsername
+    }
+
+    try {
+      const bot = await this.botMessageSender.getMe()
+      this.botUsername = bot.username ?? null
+    } catch {
+      return null
+    }
+
+    return this.botUsername
   }
 
   private async shouldSendToQueueOwnerViaBot(targetChat: string): Promise<boolean> {
@@ -187,13 +262,14 @@ export class MessageQueueWorker {
     return refs
   }
 
-  private async markSent(id: string): Promise<void> {
+  private async markSent(id: string, sentMessageId: bigint | null = null): Promise<void> {
     await this.db.messageQueue.update({
       where: { id },
       data: {
         status: 'SENT',
         sentAt: new Date(),
-        error: null
+        error: null,
+        sentMessageId
       }
     })
   }

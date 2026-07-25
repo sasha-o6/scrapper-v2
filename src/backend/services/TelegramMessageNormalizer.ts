@@ -1,3 +1,9 @@
+export interface INormalizedMessageSender {
+  id: string
+  username: string | null
+  displayName: string | null
+}
+
 export interface INormalizedTelegramMessage {
   channelId: string
   messageId: string
@@ -7,6 +13,7 @@ export interface INormalizedTelegramMessage {
   dateUnixSeconds: number
   messageText: string
   postLink: string
+  sender: INormalizedMessageSender | null
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -72,6 +79,30 @@ const buildPostLink = (
   return ''
 }
 
+const extractSender = (rawMessage: Record<string, unknown>): INormalizedMessageSender | null => {
+  const rawSender = getRecordValue(rawMessage, 'sender')
+
+  if (!isRecord(rawSender)) {
+    return null
+  }
+
+  if (asString(getRecordValue(rawSender, 'type')) !== 'user') {
+    return null
+  }
+
+  const id = getFirstString(rawSender, ['id'])
+
+  if (!id) {
+    return null
+  }
+
+  return {
+    id,
+    username: getFirstString(rawSender, ['username']),
+    displayName: getFirstString(rawSender, ['displayName', 'firstName', 'name'])
+  }
+}
+
 export const normalizeTelegramMessage = (
   rawMessage: unknown
 ): INormalizedTelegramMessage | null => {
@@ -105,6 +136,7 @@ export const normalizeTelegramMessage = (
     channel,
     dateUnixSeconds: getUnixDate(getRecordValue(rawMessage, 'date')),
     messageText,
-    postLink
+    postLink,
+    sender: extractSender(rawMessage)
   }
 }

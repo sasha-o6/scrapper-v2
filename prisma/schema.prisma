@@ -29,6 +29,7 @@ model User {
   config            Config?
   messageQueue      MessageQueue[]
   processedMessages ProcessedMessage[]
+  bannedSenders     BannedSender[]
 
   @@map("users")
 }
@@ -67,21 +68,39 @@ model Config {
 }
 
 model MessageQueue {
-  id          String      @id @default(uuid())
-  userId      String      @map("user_id")
-  messageText String      @map("message_text")
-  status      QueueStatus @default(PENDING)
-  targetChat  String      @map("target_chat")
-  error       String?
-  createdAt   DateTime    @default(now()) @map("created_at")
-  updatedAt   DateTime    @updatedAt @map("updated_at")
-  sentAt      DateTime?   @map("sent_at")
+  id               String      @id @default(uuid())
+  userId           String      @map("user_id")
+  messageText      String      @map("message_text")
+  status           QueueStatus @default(PENDING)
+  targetChat       String      @map("target_chat")
+  error            String?
+  senderTelegramId BigInt?     @map("sender_telegram_id")
+  senderUsername   String?     @map("sender_username")
+  senderName       String?     @map("sender_name")
+  sentMessageId    BigInt?     @map("sent_message_id")
+  createdAt        DateTime    @default(now()) @map("created_at")
+  updatedAt        DateTime    @updatedAt @map("updated_at")
+  sentAt           DateTime?   @map("sent_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([status, createdAt])
   @@index([userId, status])
   @@map("message_queue")
+}
+
+model BannedSender {
+  id               String   @id @default(uuid())
+  userId           String   @map("user_id")
+  senderTelegramId BigInt   @map("sender_telegram_id")
+  senderUsername   String?  @map("sender_username")
+  senderName       String?  @map("sender_name")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, senderTelegramId])
+  @@map("banned_senders")
 }
 
 model ProcessedMessage {

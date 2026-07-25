@@ -91,6 +91,38 @@ const formatChannelTitle = (channel: string, link: string): string => {
   return `[${escapedChannel}](${link})`;
 };
 
+export type TBanPromptState = "ban" | "banning" | "banned";
+
+const BAN_PROMPT_HEADER = "Заблокувати користувача:";
+const BAN_PROMPT_LABELS: Record<Exclude<TBanPromptState, "ban">, string> = {
+  banning: "\\[ БЛОКУЄМО КОРИСТУВАЧА \\]",
+  banned: "\\[ КОРИСТУВАЧ ЗАБЛОКОВАНИЙ \\]",
+};
+
+export const buildBanDeepLink = (
+  botUsername: string,
+  queueItemId: string,
+): string => `https://t.me/${botUsername.replace(/^@/, "")}?start=ban_${queueItemId}`;
+
+export const formatBanPromptBlock = (
+  state: TBanPromptState,
+  deepLink?: string,
+): string => {
+  if (state === "ban") {
+    return (
+      `${BAN_PROMPT_HEADER}\n` +
+      `[\\[ ЗАБЛОКУВАТИ КОРИСТУВАЧА \\]](${deepLink ?? ""})`
+    );
+  }
+
+  return `${BAN_PROMPT_HEADER}\n${BAN_PROMPT_LABELS[state]}`;
+};
+
+export const appendBanPromptBlock = (
+  messageText: string,
+  banPromptBlock: string,
+): string => `${messageText}\n\n${banPromptBlock}`;
+
 export const formatForwardedMessage = (
   message: IForwardMessageInput,
 ): string => {

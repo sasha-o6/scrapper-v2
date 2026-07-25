@@ -2,7 +2,10 @@ import { describe, expect, test } from 'bun:test'
 import { md } from '@mtcute/markdown-parser'
 
 import {
+  appendBanPromptBlock,
+  buildBanDeepLink,
   escapeMarkdown,
+  formatBanPromptBlock,
   formatChannelLink,
   formatClickablePostLink,
   formatForwardedMessage,
@@ -70,5 +73,26 @@ describe('Formatter', () => {
   test('normalizes Telegram post links for client auto-linking', () => {
     expect(formatClickablePostLink('t.me/deals/1')).toBe('https://t.me/deals/1')
     expect(formatClickablePostLink('https://t.me/deals/1')).toBe('https://t.me/deals/1')
+  })
+
+  test('builds bot deep link for banning a queued message sender', () => {
+    expect(buildBanDeepLink('@scraper', 'queue-1')).toBe(
+      'https://t.me/scraper?start=ban_queue-1'
+    )
+    expect(buildBanDeepLink('scraper', 'queue-1')).toBe(
+      'https://t.me/scraper?start=ban_queue-1'
+    )
+  })
+
+  test('formats ban prompt block states as valid mtcute markdown', () => {
+    const deepLink = buildBanDeepLink('@scraper', 'queue-1')
+    const banBlock = appendBanPromptBlock('base text', formatBanPromptBlock('ban', deepLink))
+
+    const parsed = md(banBlock)
+
+    expect(parsed.text).toContain('[ ЗАБЛОКУВАТИ КОРИСТУВАЧА ]')
+    expect(JSON.stringify(parsed.entities)).toContain(deepLink)
+    expect(md(formatBanPromptBlock('banning')).text).toContain('[ БЛОКУЄМО КОРИСТУВАЧА ]')
+    expect(md(formatBanPromptBlock('banned')).text).toContain('[ КОРИСТУВАЧ ЗАБЛОКОВАНИЙ ]')
   })
 })

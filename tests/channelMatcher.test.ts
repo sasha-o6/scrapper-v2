@@ -14,7 +14,8 @@ const createMessage = (): INormalizedTelegramMessage => ({
   channel: 'Deals UA',
   dateUnixSeconds: 1_700_000_000,
   messageText: 'Tesla price drop',
-  postLink: 'https://t.me/deals_ua/42'
+  postLink: 'https://t.me/deals_ua/42',
+  sender: null
 })
 
 describe('ChannelMatcher', () => {

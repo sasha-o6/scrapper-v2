@@ -1,7 +1,9 @@
 import { AlertTriangle, History, Pause, Play, Save, ShieldCheck } from 'lucide-preact'
 import { memo } from 'preact/compat'
 
+import type { IApiClient } from '@frontend/api/client'
 import { ArrayEditor } from '@frontend/components/ArrayEditor'
+import { BannedSenders } from '@frontend/components/BannedSenders'
 import { ChannelEditor } from '@frontend/components/ChannelEditor'
 import { Toggle } from '@frontend/components/Toggle'
 import { useDashboardConfig } from '@frontend/hooks/useDashboardConfig'
@@ -17,12 +19,13 @@ export interface IDashboardProps {
   config: IConfigDto
   isSaving: boolean
   userName: string
+  apiClient: IApiClient
   onSave(payload: IConfigUpdatePayload): Promise<IConfigDto>
   onCollectHistory(payload: IHistoryPayload): Promise<IHistoryResultDto>
 }
 
 export const Dashboard = memo(
-  ({ config, isSaving, userName, onSave, onCollectHistory }: IDashboardProps) => {
+  ({ config, isSaving, userName, apiClient, onSave, onCollectHistory }: IDashboardProps) => {
     const dashboard = useDashboardConfig({ config, onSave, onCollectHistory })
 
     return (
@@ -130,6 +133,8 @@ export const Dashboard = memo(
             onClear={() => dashboard.clearList('banWords')}
           />
         </section>
+
+        <BannedSenders apiClient={apiClient} />
 
         <section className={styles.section}>
           <div className={styles.sectionHeader}>

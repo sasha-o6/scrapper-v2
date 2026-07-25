@@ -4,6 +4,7 @@ import { cors } from 'hono/cors'
 
 import { createAuthMiddleware } from '@backend/middleware/auth'
 import { createAdminLoginRoutes } from '@backend/routes/adminLogin'
+import { createBannedSenderRoutes } from '@backend/routes/bannedSenders'
 import { createConfigRoutes } from '@backend/routes/config'
 import { createHistoryRoutes } from '@backend/routes/history'
 import { services } from '@backend/services/container'
@@ -17,7 +18,7 @@ app.use(
   cors({
     origin: ['http://localhost:5173', 'http://127.0.0.1:5173'],
     allowHeaders: ['content-type', 'authorization', 'x-telegram-init-data'],
-    allowMethods: ['GET', 'POST', 'PUT', 'OPTIONS']
+    allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
   })
 )
 
@@ -31,6 +32,7 @@ const protectedApi = new Hono<TAppEnv>()
 protectedApi.use('*', createAuthMiddleware(services.configService))
 protectedApi.route('/', createConfigRoutes(services.configService))
 protectedApi.route('/', createHistoryRoutes(services.historicalFetcher))
+protectedApi.route('/', createBannedSenderRoutes(services.senderBanService))
 
 app.route('/api', protectedApi)
 app.route('/', createAdminLoginRoutes(services.adminLoginWebService))

@@ -81,6 +81,11 @@ interface IMtcuteRuntimeClient extends IMtcuteSessionClient {
     chatId: TTelegramPeerInput,
     options: { limit: number; offset?: { id: number; date: number } }
   ): Promise<unknown[]>
+  editMessage?(params: {
+    chatId: TTelegramPeerInput
+    message: number
+    text: InputText
+  }): Promise<unknown>
 }
 
 interface ITelegramClientConstructor {
@@ -359,6 +364,46 @@ export class ClientManager {
       }
 
       return this.toJoinError(error)
+    }
+  }
+
+  public async editSystemMessageText(
+    targetChat: string,
+    messageId: number,
+    text: InputText
+  ): Promise<boolean> {
+    let client: IMtcuteRuntimeClient | null = null
+
+    try {
+      client = await this.getSystemClient()
+    } catch (error) {
+      logger.warn('Failed to get system client for message edit', {
+        error: getErrorText(error)
+      })
+
+      return false
+    }
+
+    if (!client?.editMessage) {
+      return false
+    }
+
+    try {
+      await client.editMessage({
+        chatId: getPrimaryMtcutePeerInput(targetChat),
+        message: messageId,
+        text
+      })
+
+      return true
+    } catch (error) {
+      logger.warn('Failed to edit userbot message', {
+        targetChat,
+        messageId,
+        error: getErrorText(error)
+      })
+
+      return false
     }
   }
 

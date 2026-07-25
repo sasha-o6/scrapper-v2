@@ -183,6 +183,18 @@
   }
 }
 
+.bannedSenderLink {
+  @apply flex min-w-0 flex-1 items-center gap-1.5 text-ink no-underline transition-[color] duration-150;
+
+  &:hover {
+    @apply text-pine;
+  }
+
+  svg {
+    @apply shrink-0 text-ink/40;
+  }
+}
+
 .warningBand {
   @apply flex items-start gap-3 border-b border-honey/30 bg-amber-50 px-5 py-4 text-sm font-semibold text-honey max-md:px-4;
 

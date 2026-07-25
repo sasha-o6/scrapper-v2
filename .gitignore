@@ -8,3 +8,4 @@ coverage
 .DS_Store
 .omx
 backup.sql
+backup_*.sql

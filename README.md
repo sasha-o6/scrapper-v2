@@ -70,3 +70,19 @@ bun run typecheck
 bun test
 bun run build
 ```
+
+
+### Як потім відновити цю базу (Import)
+```
+docker compose exec -T postgres psql -U postgres -d telegram_monitor < backup.sql
+```
+
+### викачати базу
+```
+docker exec -e PGPASSWORD="postgres" scrapper-v2-postgres-1 pg_dump -U postgres -d telegram_monitor > backup.sql
+```
+
+### дроп бази
+```
+docker compose exec postgres psql -U postgres -d telegram_monitor -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public; GRANT ALL ON SCHEMA public TO postgres; GRANT ALL ON SCHEMA public TO public;"
+```

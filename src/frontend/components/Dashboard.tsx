@@ -41,16 +41,6 @@ export const Dashboard = memo(
               label={dashboard.draft.isActive ? 'Active' : 'Pause'}
               onChange={dashboard.setIsActive}
             />
-            <button
-              className={styles.primaryButton}
-              type="button"
-              title="Зберегти"
-              disabled={!dashboard.isDirty || isSaving}
-              onClick={() => void dashboard.save()}
-            >
-              <Save size={18} />
-              <span>{isSaving ? 'Збереження' : 'Зберегти'}</span>
-            </button>
           </div>
         </section>
 
@@ -169,6 +159,19 @@ export const Dashboard = memo(
             <p className={styles.successText}>{dashboard.historyMessage}</p>
           ) : null}
         </section>
+
+        <div className={styles.saveBar}>
+          <button
+            className={styles.primaryButton}
+            type="button"
+            title="Зберегти"
+            disabled={!dashboard.isDirty || isSaving}
+            onClick={() => void dashboard.save()}
+          >
+            <Save size={18} />
+            <span>{isSaving ? 'Збереження' : 'Зберегти'}</span>
+          </button>
+        </div>
       </div>
     )
   }

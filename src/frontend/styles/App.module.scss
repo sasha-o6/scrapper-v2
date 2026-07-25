@@ -22,6 +22,15 @@
   @apply flex flex-col gap-5;
 }
 
+.saveBar {
+  @apply sticky bottom-0 z-10 flex justify-end border-t border-line bg-mist/95 pt-3 backdrop-blur-sm max-sm:justify-stretch;
+  padding-bottom: calc(0.75rem + env(safe-area-inset-bottom));
+
+  button {
+    @apply max-sm:w-full max-sm:justify-center;
+  }
+}
+
 .summaryBand,
 .section,
 .listEditor {

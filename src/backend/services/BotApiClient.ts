@@ -30,10 +30,26 @@ export interface IBotApiUser {
 export class BotApiClient {
   private readonly baseUrl: string
   public readonly tokenBotId: string | null
+  private selfRef: string | null = null
 
   public constructor(botToken: string) {
     this.baseUrl = `https://api.telegram.org/bot${botToken}`
     this.tokenBotId = botToken.split(':')[0] || null
+  }
+
+  public async getSelfRef(): Promise<string | null> {
+    if (this.selfRef) {
+      return this.selfRef
+    }
+
+    try {
+      const bot = await this.getMe()
+      this.selfRef = bot.username ? `@${bot.username}` : bot.id.toString()
+
+      return this.selfRef
+    } catch {
+      return this.tokenBotId
+    }
   }
 
   public async getUpdates(offset: number): Promise<IBotApiUpdate[]> {

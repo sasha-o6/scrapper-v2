@@ -29,6 +29,10 @@ export interface IChannelJoiner {
   joinChannel(channel: string): Promise<IChannelJoinResult>
 }
 
+export interface IDefaultTargetChatProvider {
+  getSelfRef(): Promise<string | null>
+}
+
 const normalizeList = (items?: string[]): string[] | undefined => {
   if (!items) {
     return undefined
@@ -158,7 +162,8 @@ export class ConfigService {
   public constructor(
     private readonly db: PrismaClient,
     private readonly systemStateService: SystemStateService,
-    private readonly channelJoinDelayMs: number = 0
+    private readonly channelJoinDelayMs: number = 0,
+    private readonly defaultTargetChatProvider: IDefaultTargetChatProvider | null = null
   ) {}
 
   public setChannelJoiner(channelJoiner: IChannelJoiner): void {
@@ -205,7 +210,7 @@ export class ConfigService {
   }
 
   private async ensureConfig(userId: string): Promise<Config> {
-    return this.db.config.upsert({
+    const config = await this.db.config.upsert({
       where: { userId },
       create: {
         userId,
@@ -217,6 +222,33 @@ export class ConfigService {
       },
       update: {}
     })
+
+    if (config.targetChat && config.targetChat.trim() !== '') {
+      return config
+    }
+
+    const defaultTargetChat = await this.resolveDefaultTargetChat()
+
+    if (!defaultTargetChat) {
+      return config
+    }
+
+    return this.db.config.update({
+      where: { userId },
+      data: { targetChat: defaultTargetChat }
+    })
+  }
+
+  private async resolveDefaultTargetChat(): Promise<string | null> {
+    if (!this.defaultTargetChatProvider) {
+      return null
+    }
+
+    try {
+      return await this.defaultTargetChatProvider.getSelfRef()
+    } catch {
+      return null
+    }
   }
 
   private async toUpdateData(
@@ -232,7 +264,8 @@ export class ConfigService {
     const historyDepthDays = normalizeHistoryDepth(payload.historyDepthDays)
 
     if (targetChat !== undefined) {
-      data.targetChat = targetChat
+      data.targetChat =
+        targetChat === '' ? ((await this.resolveDefaultTargetChat()) ?? targetChat) : targetChat
     }
 
     if (payload.isActive !== undefined) {

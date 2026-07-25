@@ -61,6 +61,10 @@
   @apply flex flex-col gap-2 text-sm font-semibold text-ink;
 }
 
+.fieldHint {
+  @apply text-xs font-normal text-ink/60;
+}
+
 .input {
   @apply h-11 rounded-md border border-line bg-white px-3 text-base text-ink outline-none transition-[box-shadow,border-color] duration-150;
 }

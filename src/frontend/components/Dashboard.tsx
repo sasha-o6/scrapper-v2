@@ -71,6 +71,9 @@ export const Dashboard = memo(
               placeholder="@chat або -100..."
               onInput={(event) => dashboard.setTargetChat(event.currentTarget.value)}
             />
+            <span className={styles.fieldHint}>
+              За замовчуванням — чат з ботом. Очистіть поле, щоб повернути дефолт.
+            </span>
           </label>
         </section>
 
